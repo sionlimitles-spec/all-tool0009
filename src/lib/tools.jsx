@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import * as I from "lucide-react";
+import { AI_MODELS, DEFAULT_MODEL, SYSTEM_PROMPT, getStoredModel, setStoredModel, getStoredKeys, saveStoredKeys, getStoredHistory, saveStoredHistory } from "./ai-config";
 
 /* ============ UTILS ============ */
 export const copy = async (t) => {
@@ -91,19 +92,18 @@ export function MarkdownPreview() {
       .replace(/^# (.+)$/gm, "<h1>$1</h1>")
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
       .replace(/\*(.+?)\*/g, "<em>$1</em>")
-      .replace(/`([^`]+)`/g, "<code style='background:#f1f5f9;padding:2px 6px;border-radius:4px;font-family:monospace'>$1</code>")
-      .replace(/```([\s\S]*?)```/g, "<pre style='background:#1e293b;color:#e2e8f0;padding:14px;border-radius:10px;overflow-x:auto'><code>$1</code></pre>")
+      .replace(/`([^`]+)`/g, "<code style='background:rgba(167,139,250,0.15);padding:2px 6px;border-radius:4px;font-family:monospace;color:var(--p)'>$1</code>")
+      .replace(/```([\s\S]*?)```/g, "<pre style='background:rgba(0,0,0,0.4);color:#e2e8f0;padding:14px;border-radius:10px;overflow-x:auto;border:1px solid var(--border)'><code>$1</code></pre>")
       .replace(/^\- (.+)$/gm, "<li>$1</li>")
       .replace(/(<li>.*<\/li>)/s, "<ul>$1</ul>")
-      .replace(/\[(.+?)\]\((.+?)\)/g, "<a href='$2' style='color:#7c3aed'>$1</a>")
-      .replace(/\n\n/g, "</p><p>")
-      .replace(/\n/g, "<br>");
+      .replace(/\[(.+?)\]\((.+?)\)/g, "<a href='$2' style='color:var(--p)'>$1</a>")
+      .replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>");
     return "<p>" + h + "</p>";
   }, [t]);
   return (
     <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
       <textarea className="txa" rows={16} value={t} onChange={(e) => setT(e.target.value)} />
-      <div className="card" style={{ background: "#fff", color: "#0f172a", fontSize: 14, lineHeight: 1.7, minHeight: 300 }} dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="card" style={{ color: "var(--text)", fontSize: 14, lineHeight: 1.7, minHeight: 300 }} dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   );
 }
@@ -177,9 +177,10 @@ export function HtmlEditor() {
 <html>
 <head>
   <style>
-    body { font-family: sans-serif; padding: 20px; text-align: center; }
-    h1 { color: #7c3aed; }
-    button { padding: 10px 20px; background: #7c3aed; color: white; border: none; border-radius: 8px; cursor: pointer; }
+    body { font-family: sans-serif; padding: 20px; text-align: center; background: #0a0a14; color: #fff; }
+    h1 { background: linear-gradient(135deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 32px; }
+    button { padding: 10px 20px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+    button:hover { box-shadow: 0 0 20px rgba(167,139,250,0.6); }
   </style>
 </head>
 <body>
@@ -217,7 +218,7 @@ export function CssPlayground() {
   font-weight: bold;
   font-family: sans-serif;
 }`);
-  const full = `<!DOCTYPE html><html><head><style>body{margin:0;padding:40px;background:#faf5ff;min-height:100vh;display:flex;align-items:center;justify-content:center;}${css}</style></head><body><div class="box">Hello</div></body></html>`;
+  const full = `<!DOCTYPE html><html><head><style>body{margin:0;padding:40px;background:#0a0a14;min-height:100vh;display:flex;align-items:center;justify-content:center;}${css}</style></head><body><div class="box">Hello</div></body></html>`;
   return (
     <div className="col">
       <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
@@ -577,7 +578,7 @@ export function PasswordGenerator() {
   return (
     <div className="col">
       <div className="card">
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16, border: "1.5px solid var(--bd-strong)", borderRadius: 12, fontFamily: "monospace", fontSize: 14, wordBreak: "break-all", background: "var(--ps)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16, border: "1.5px solid var(--border-strong)", borderRadius: 12, fontFamily: "monospace", fontSize: 14, wordBreak: "break-all", background: "var(--ps)" }}>
           <span style={{ flex: 1 }}>{pw}</span>
           <button className="btn btn-g" onClick={() => copy(pw)}><I.Copy size={16} /></button>
           <button className="btn btn-g" onClick={gen}><I.RefreshCw size={16} /></button>
@@ -631,7 +632,7 @@ export function PasswordStrength() {
             <span style={{ color: cl[a.score], fontWeight: 800, fontSize: 16 }}>{lv[a.score]}</span>
             <span className="mut">Skor: {a.score}/6</span>
           </div>
-          <div style={{ height: 10, background: "var(--bd)", borderRadius: 5, marginTop: 10, overflow: "hidden" }}>
+          <div style={{ height: 10, background: "var(--border)", borderRadius: 5, marginTop: 10, overflow: "hidden" }}>
             <div style={{ width: `${(a.score / 6) * 100}%`, height: "100%", background: cl[a.score], transition: "0.3s" }} />
           </div>
         </div>
@@ -641,7 +642,7 @@ export function PasswordStrength() {
         </div>
         <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
           {[["Min 12 karakter", a.checks.length], ["Huruf besar", a.checks.upper], ["Huruf kecil", a.checks.lower], ["Angka", a.checks.numbers], ["Simbol", a.checks.symbols], ["Min 16 karakter", a.checks.long]].map(([l, v]) => (
-            <div key={l} style={{ padding: 12, border: `1.5px solid ${v ? "var(--green)" : "var(--bd)"}`, borderRadius: 11, fontSize: 12, color: v ? "var(--green)" : "var(--mut)", display: "flex", gap: 8, alignItems: "center", fontWeight: 600 }}>
+            <div key={l} style={{ padding: 12, border: `1.5px solid ${v ? "var(--green)" : "var(--border)"}`, borderRadius: 11, fontSize: 12, color: v ? "var(--green)" : "var(--text-muted)", display: "flex", gap: 8, alignItems: "center", fontWeight: 600 }}>
               <span>{v ? "OK" : "X"}</span> {l}
             </div>
           ))}
@@ -651,7 +652,7 @@ export function PasswordStrength() {
   );
 }
 
-/* ============ VIRUS SCANNER v2 ============ */
+/* ============ VIRUS SCANNER ============ */
 export function VirusScanner({ onToast }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -675,286 +676,117 @@ export function VirusScanner({ onToast }) {
 
   const scanUrl = async (url) => {
     try {
-      const r = await fetch("/api", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "scan-url", url }),
-      });
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "scan-url", url }) });
       const d = await r.json();
-      if (d.error) {
-        setErr(d.error);
-        onToast?.(d.error, "error");
-      } else {
-        setResult({ type: "url-pending", ...d });
-        onToast?.("Menganalisis URL, tunggu ~15 detik...", "info");
-        pollUrl(d.scanId, 0);
-      }
+      if (d.error) { setErr(d.error); onToast?.(d.error, "error"); }
+      else { setResult({ type: "url-pending", ...d }); onToast?.("Menganalisis URL, tunggu ~15 detik...", "info"); pollUrl(d.scanId, 0); }
     } catch { setErr("Kesalahan jaringan"); }
   };
 
   const scanHash = async (hash) => {
     try {
-      const r = await fetch("/api", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "scan-hash", hash: hash.toLowerCase() }),
-      });
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "scan-hash", hash: hash.toLowerCase() }) });
       const d = await r.json();
-      if (d.error) {
-        setErr(d.error);
-        onToast?.(d.error, "error");
-      } else {
-        setResult({ type: "hash", ...d });
-        onToast?.(d.malware ? "File berbahaya terdeteksi!" : "File aman", d.malware ? "error" : "success");
-      }
+      if (d.error) { setErr(d.error); onToast?.(d.error, "error"); }
+      else { setResult({ type: "hash", ...d }); onToast?.(d.malware ? "File berbahaya!" : "File aman", d.malware ? "error" : "success"); }
     } catch { setErr("Kesalahan jaringan"); }
   };
 
   const pollUrl = async (id, attempt) => {
-    if (attempt > 8) {
-      setErr("Timeout. Cek manual di urlscan.io");
-      return;
-    }
+    if (attempt > 8) { setErr("Timeout. Cek manual di urlscan.io"); return; }
     setPollCount(attempt + 1);
     await new Promise((r) => setTimeout(r, 3000));
     try {
-      const r = await fetch("/api", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "scan-url-result", id }),
-      });
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "scan-url-result", id }) });
       const d = await r.json();
-      if (d.error || !d.verdicts) {
-        pollUrl(id, attempt + 1);
-      } else {
-        setResult({ type: "url-result", ...d, scanId: id });
-        onToast?.(d.malicious ? "URL berbahaya terdeteksi!" : "URL aman", d.malicious ? "error" : "success");
-      }
+      if (d.error || !d.verdicts) pollUrl(id, attempt + 1);
+      else { setResult({ type: "url-result", ...d, scanId: id }); onToast?.(d.malicious ? "URL berbahaya!" : "URL aman", d.malicious ? "error" : "success"); }
     } catch { pollUrl(id, attempt + 1); }
   };
 
   const startScan = async () => {
     const t = input.trim();
-    if (!t) {
-      setErr("Masukkan URL, hash, atau upload file terlebih dahulu.");
-      return;
-    }
+    if (!t) { setErr("Masukkan URL, hash, atau upload file."); return; }
     setLoading(true); setErr(""); setResult(null); setPollCount(0);
-
     const type = detectType(t);
-    if (!type) {
-      setErr("Input tidak dikenali. Masukkan URL (https://...), hash (32/40/64 karakter hex), atau upload file.");
-      setLoading(false);
-      return;
-    }
-
-    if (type === "url") {
-      let url = t;
-      if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-      await scanUrl(url);
-    } else {
-      await scanHash(t);
-    }
+    if (!type) { setErr("Input tidak dikenali."); setLoading(false); return; }
+    if (type === "url") { let url = t; if (!/^https?:\/\//i.test(url)) url = "https://" + url; await scanUrl(url); }
+    else await scanHash(t);
     setLoading(false);
   };
 
   const handleFile = async (f) => {
     if (!f) return;
-    if (f.size > 50 * 1024 * 1024) {
-      onToast?.("File terlalu besar (maks 50 MB)", "error");
-      return;
-    }
-    setFileName(f.name);
-    setErr(""); setResult(null); setLoading(true);
+    if (f.size > 50 * 1024 * 1024) { onToast?.("File terlalu besar (maks 50 MB)", "error"); return; }
+    setFileName(f.name); setErr(""); setResult(null); setLoading(true);
     onToast?.(`Menghitung hash ${f.name}...`, "info");
-
     try {
       const buf = await f.arrayBuffer();
       const hashBuf = await crypto.subtle.digest("SHA-256", buf);
       const hash = Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
       setInput(hash);
-      onToast?.("Hash SHA-256 siap. Scan otomatis...", "info");
+      onToast?.("Hash siap. Scan otomatis...", "info");
       await scanHash(hash);
-    } catch (e) {
-      setErr("Gagal membaca file: " + e.message);
-    }
+    } catch (e) { setErr("Gagal membaca file: " + e.message); }
     setLoading(false);
   };
 
-  const reset = () => {
-    setInput(""); setResult(null); setErr(""); setFileName(""); setPollCount(0);
-  };
-
+  const reset = () => { setInput(""); setResult(null); setErr(""); setFileName(""); setPollCount(0); };
   const detected = detectType(input);
-  const detectedLabel = {
-    url: "URL",
-    "hash-md5": "Hash MD5",
-    "hash-sha1": "Hash SHA-1",
-    "hash-sha256": "Hash SHA-256",
-  }[detected] || null;
+  const detectedLabel = { url: "URL", "hash-md5": "Hash MD5", "hash-sha1": "Hash SHA-1", "hash-sha256": "Hash SHA-256" }[detected] || null;
 
   return (
     <div className="col">
       <div className="card">
         <div className="tag" style={{ marginBottom: 12 }}>SCAN OTOMATIS</div>
-        <p className="mut" style={{ marginBottom: 14, lineHeight: 1.6 }}>
-          Masukkan URL atau hash, atau upload file. Sistem otomatis mendeteksi dan scan.
-        </p>
-
+        <p className="mut" style={{ marginBottom: 14, lineHeight: 1.6 }}>Masukkan URL atau hash, atau upload file. Sistem otomatis mendeteksi dan scan.</p>
         <div className="row" style={{ marginBottom: 10 }}>
-          <input
-            className="inp"
-            style={{ flex: 1, minWidth: 200, fontFamily: "monospace", fontSize: 13 }}
-            value={input}
-            onChange={(e) => { setInput(e.target.value); setErr(""); }}
-            onKeyDown={(e) => e.key === "Enter" && startScan()}
-            placeholder="https://situs.com  atau  hash SHA-256"
-          />
+          <input className="inp" style={{ flex: 1, minWidth: 200, fontFamily: "monospace", fontSize: 13 }} value={input} onChange={(e) => { setInput(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && startScan()} placeholder="https://situs.com  atau  hash SHA-256" />
           <button className="btn btn-p" disabled={loading || !input} onClick={startScan}>
             {loading ? <I.Loader2 size={14} className="spin" /> : <I.ShieldAlert size={14} />}
             {loading ? "Scanning..." : "Scan"}
           </button>
         </div>
-
-        {detectedLabel && !loading && (
-          <div className="row" style={{ marginBottom: 10 }}>
-            <span className="pill">
-              <I.Check size={11} />Terdeteksi: {detectedLabel}
-            </span>
-          </div>
-        )}
-
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault(); setDragOver(false);
-            if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]);
-          }}
-          onClick={() => fileRef.current?.click()}
-          style={{
-            border: `2px dashed ${dragOver ? "var(--p)" : "var(--bd-strong)"}`,
-            borderRadius: 14,
-            padding: 24,
-            textAlign: "center",
-            cursor: "pointer",
-            background: dragOver ? "var(--ps)" : "transparent",
-            transition: "all 0.2s",
-          }}
-        >
+        {detectedLabel && !loading && (<div className="row" style={{ marginBottom: 10 }}><span className="pill"><I.Check size={11} />Terdeteksi: {detectedLabel}</span></div>)}
+        <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={(e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]); }} onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${dragOver ? "var(--p)" : "var(--border-strong)"}`, borderRadius: 14, padding: 24, textAlign: "center", cursor: "pointer", background: dragOver ? "var(--ps)" : "transparent", transition: "all 0.2s" }}>
           <I.Upload size={26} style={{ color: "var(--p)", margin: "0 auto 8px" }} />
           <div style={{ fontWeight: 700, fontSize: 13 }}>Upload file untuk scan</div>
           <div className="soft" style={{ marginTop: 4 }}>Klik atau drag file ke sini (maks 50 MB)</div>
           {fileName && <div className="mut" style={{ marginTop: 8 }}>File: {fileName}</div>}
-          <input
-            ref={fileRef}
-            type="file"
-            style={{ display: "none" }}
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-          />
+          <input ref={fileRef} type="file" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
         </div>
-
-        {input && !loading && (
-          <button className="btn btn-g" style={{ marginTop: 12, fontSize: 12 }} onClick={reset}>
-            <I.X size={12} />Reset
-          </button>
-        )}
-
-        <div className="soft" style={{ marginTop: 12, lineHeight: 1.6 }}>
-          <div><b>URL</b> diperiksa via urlscan.io</div>
-          <div><b>Hash</b> diperiksa via MalwareBazaar (abuse.ch)</div>
-          <div><b>File</b> SHA-256 dihitung otomatis, lalu dicari di database</div>
-        </div>
-
-        {err && (
-          <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>
-            {err}
-          </div>
-        )}
+        {input && !loading && (<button className="btn btn-g" style={{ marginTop: 12, fontSize: 12 }} onClick={reset}><I.X size={12} />Reset</button>)}
+        {err && <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{err}</div>}
       </div>
-
-      {result?.type === "url-pending" && (
-        <div className="card" style={{ textAlign: "center", padding: 30 }}>
-          <I.Loader2 size={32} className="spin" style={{ color: "var(--p)", margin: "0 auto 12px" }} />
-          <div style={{ fontWeight: 700 }}>Menganalisis URL...</div>
-          <div className="mut" style={{ marginTop: 6 }}>Percobaan {pollCount}/8 · Estimasi 15-30 detik</div>
-        </div>
-      )}
-
+      {result?.type === "url-pending" && (<div className="card" style={{ textAlign: "center", padding: 30 }}><I.Loader2 size={32} className="spin" style={{ color: "var(--p)", margin: "0 auto 12px" }} /><div style={{ fontWeight: 700 }}>Menganalisis URL...</div><div className="mut" style={{ marginTop: 6 }}>Percobaan {pollCount}/8</div></div>)}
       {result?.type === "url-result" && (
         <div className="card fade">
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
             <b style={{ fontSize: 16 }}>Hasil Scan URL</b>
-            <span
-              className="pill"
-              style={{
-                background: result.malicious ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.15)",
-                color: result.malicious ? "var(--red)" : "var(--green)",
-              }}
-            >
-              {result.malicious ? "BERBAHAYA" : "AMAN"}
-            </span>
+            <span className="pill" style={{ background: result.malicious ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.15)", color: result.malicious ? "var(--red)" : "var(--green)" }}>{result.malicious ? "BERBAHAYA" : "AMAN"}</span>
           </div>
           <div className="col">
-            {[
-              ["Skor", result.score ?? 0],
-              ["Malicious", result.malicious ? "Ya" : "Tidak"],
-              ["Kategori", (result.categories || []).join(", ") || "-"],
-              ["Server", result.page?.server || "-"],
-              ["IP", result.page?.ip || "-"],
-              ["Negara", result.page?.country || "-"],
-              ["Domain", result.page?.domain || "-"],
-            ].map(([l, v]) => (
-              <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--bd)" }}>
-                <span className="mut">{l}</span>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{String(v)}</span>
+            {[["Skor", result.score ?? 0], ["Malicious", result.malicious ? "Ya" : "Tidak"], ["Kategori", (result.categories || []).join(", ") || "-"], ["Server", result.page?.server || "-"], ["IP", result.page?.ip || "-"], ["Negara", result.page?.country || "-"], ["Domain", result.page?.domain || "-"]].map(([l, v]) => (
+              <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                <span className="mut">{l}</span><span style={{ fontSize: 13, fontWeight: 600 }}>{String(v)}</span>
               </div>
             ))}
           </div>
-          <a
-            className="btn btn-s"
-            style={{ marginTop: 14, display: "inline-flex" }}
-            href={`https://urlscan.io/result/${result.scanId}/`}
-            target="_blank"
-            rel="noopener"
-          >
-            <I.ExternalLink size={14} />Lihat Laporan Lengkap
-          </a>
+          <a className="btn btn-s" style={{ marginTop: 14, display: "inline-flex" }} href={`https://urlscan.io/result/${result.scanId}/`} target="_blank" rel="noopener"><I.ExternalLink size={14} />Lihat Laporan Lengkap</a>
         </div>
       )}
-
       {result?.type === "hash" && (
         <div className="card fade">
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
             <b style={{ fontSize: 16 }}>Hasil Scan File</b>
-            <span
-              className="pill"
-              style={{
-                background: result.malware ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.15)",
-                color: result.malware ? "var(--red)" : "var(--green)",
-              }}
-            >
-              {result.malware ? "MALWARE" : "BERSIH"}
-            </span>
+            <span className="pill" style={{ background: result.malware ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.15)", color: result.malware ? "var(--red)" : "var(--green)" }}>{result.malware ? "MALWARE" : "BERSIH"}</span>
           </div>
-          {fileName && (
-            <div className="row" style={{ marginBottom: 10 }}>
-              <I.File size={14} style={{ color: "var(--p)" }} />
-              <span style={{ fontSize: 13, fontWeight: 600 }}>{fileName}</span>
-            </div>
-          )}
+          {fileName && (<div className="row" style={{ marginBottom: 10 }}><I.File size={14} style={{ color: "var(--p)" }} /><span style={{ fontSize: 13, fontWeight: 600 }}>{fileName}</span></div>)}
           {result.found ? (
             <div className="col">
-              {[
-                ["Signature", result.signature],
-                ["File Type", result.fileType],
-                ["File Name", result.fileName],
-                ["First Seen", result.firstSeen],
-                ["Tags", (result.tags || []).join(", ") || "-"],
-              ].map(([l, v]) => (
-                <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--bd)" }}>
-                  <span className="mut">{l}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{v}</span>
+              {[["Signature", result.signature], ["File Type", result.fileType], ["File Name", result.fileName], ["First Seen", result.firstSeen], ["Tags", (result.tags || []).join(", ") || "-"]].map(([l, v]) => (
+                <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span className="mut">{l}</span><span style={{ fontSize: 13, fontWeight: 600 }}>{v}</span>
                 </div>
               ))}
             </div>
@@ -962,21 +794,16 @@ export function VirusScanner({ onToast }) {
             <div style={{ textAlign: "center", padding: 20 }}>
               <I.CheckCircle2 size={44} style={{ color: "var(--green)", margin: "0 auto 10px" }} />
               <div style={{ fontWeight: 700, fontSize: 14 }}>File bersih</div>
-              <div className="mut" style={{ marginTop: 6 }}>
-                {result.message || "Hash tidak ditemukan di database malware."}
-              </div>
+              <div className="mut" style={{ marginTop: 6 }}>{result.message || "Hash tidak ditemukan di database malware."}</div>
             </div>
           )}
-          <div className="soft" style={{ marginTop: 14, wordBreak: "break-all", fontFamily: "monospace", fontSize: 10 }}>
-            Hash: {input}
-          </div>
         </div>
       )}
     </div>
   );
 }
 
-/* ============ DOWNLOADERS ============ */
+/* ============ TIKTOK DOWNLOADER (1080p) ============ */
 export function TikTokDownloader({ onToast }) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -993,7 +820,8 @@ export function TikTokDownloader({ onToast }) {
       else {
         setR(d);
         onToast?.("Video siap diunduh", "success");
-        setTimeout(() => handleDownload(d.noWm || d.video, `${(d.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_nowm.mp4`, "video"), 300);
+        // Auto-download HD no-watermark
+        setTimeout(() => handleDownload(d.hd || d.noWm, `${(d.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_hd.mp4`, "hd"), 300);
       }
     } catch { onToast?.("Kesalahan jaringan.", "error"); }
     setLoading(false);
@@ -1040,9 +868,10 @@ export function TikTokDownloader({ onToast }) {
           <input className="inp" style={{ flex: 1, minWidth: 200 }} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.tiktok.com/@user/video/..." />
           <button className="btn btn-p" disabled={loading || !url} onClick={go}>
             {loading ? <I.Loader2 size={16} className="spin" /> : <I.Download size={16} />}
-            {loading ? "Memproses..." : "Download Otomatis"}
+            {loading ? "Memproses..." : "Download HD 1080p"}
           </button>
         </div>
+        <div className="soft" style={{ marginTop: 10 }}>Download otomatis resolusi HD 1080p tanpa watermark.</div>
       </div>
       {r && (
         <div className="card fade">
@@ -1053,24 +882,24 @@ export function TikTokDownloader({ onToast }) {
               <div className="mut" style={{ marginTop: 6 }}>@{r.author} {r.nickname && `• ${r.nickname}`}</div>
               <div className="row" style={{ marginTop: 12 }}>
                 {[["Play", r.stats?.plays], ["Like", r.stats?.likes], ["Komen", r.stats?.comments], ["Share", r.stats?.shares]].map(([l, v]) => (
-                  <div key={l} style={{ padding: "5px 11px", border: "1px solid var(--bd)", borderRadius: 9, fontSize: 11 }}>
-                    <span style={{ color: "var(--mut)" }}>{l}:</span> <b>{fmt(v)}</b>
+                  <div key={l} style={{ padding: "5px 11px", border: "1px solid var(--border)", borderRadius: 9, fontSize: 11 }}>
+                    <span style={{ color: "var(--text-muted)" }}>{l}:</span> <b>{fmt(v)}</b>
                   </div>
                 ))}
               </div>
               <div className="col" style={{ marginTop: 14 }}>
-                <button className="btn btn-p" disabled={dlState["video"] != null && dlState["video"] < 100}
-                  onClick={() => dlState["video"] != null && dlState["video"] < 100 ? null : handleDownload(r.noWm, `${(r.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_nowm.mp4`, "video")}>
-                  {dlState["video"] != null && dlState["video"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["video"]}%</> : <><I.Download size={14} />Tanpa Watermark</>}
+                <button className="btn btn-p" disabled={dlState["hd"] != null && dlState["hd"] < 100}
+                  onClick={() => dlState["hd"] != null && dlState["hd"] < 100 ? null : handleDownload(r.hd, `${(r.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_hd.mp4`, "hd")}>
+                  {dlState["hd"] != null && dlState["hd"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["hd"]}%</> : <><I.Download size={14} />HD 1080p</>}
                 </button>
-                <button className="btn btn-s" disabled={dlState["hd"] != null && dlState["hd"] < 100}
-                  onClick={() => dlState["hd"] != null && dlState["hd"] < 100 ? null : handleDownload(r.video, `${(r.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_hd.mp4`, "hd")}>
-                  {dlState["hd"] != null && dlState["hd"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["hd"]}%</> : <><I.Download size={14} />HD</>}
+                <button className="btn btn-s" disabled={dlState["video"] != null && dlState["video"] < 100}
+                  onClick={() => dlState["video"] != null && dlState["video"] < 100 ? null : handleDownload(r.noWm, `${(r.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_nowm.mp4`, "video")}>
+                  {dlState["video"] != null && dlState["video"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["video"]}%</> : <><I.Download size={14} />No Watermark</>}
                 </button>
                 {r.music && (
                   <button className="btn btn-s" disabled={dlState["music"] != null && dlState["music"] < 100}
                     onClick={() => dlState["music"] != null && dlState["music"] < 100 ? null : handleDownload(r.music, "audio.mp3", "music")}>
-                    {dlState["music"] != null && dlState["music"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["music"]}%</> : <><I.Music size={14} />Audio</>}
+                    {dlState["music"] != null && dlState["music"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["music"]}%</> : <><I.Music size={14} />Audio MP3</>}
                   </button>
                 )}
               </div>
@@ -1082,9 +911,11 @@ export function TikTokDownloader({ onToast }) {
   );
 }
 
+/* ============ YOUTUBE DOWNLOADER (1080p) ============ */
 export function YouTubeDownloader({ onToast }) {
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState("video");
+  const [quality, setQuality] = useState("1080");
   const [loading, setLoading] = useState(false);
   const [r, setR] = useState(null);
   const [fb, setFb] = useState("");
@@ -1095,7 +926,7 @@ export function YouTubeDownloader({ onToast }) {
     if (!url) return;
     setLoading(true); setE(""); setR(null); setFb("");
     try {
-      const res = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "youtube", url, mode }) });
+      const res = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "youtube", url, mode, quality }) });
       const d = await res.json();
       if (!res.ok) { setE(d.error || "Gagal"); if (d.videoId) setFb(d.videoId); onToast?.(d.error || "Gagal", "error"); }
       else {
@@ -1148,6 +979,13 @@ export function YouTubeDownloader({ onToast }) {
           <button className={`chip ${mode === "video" ? "active" : ""}`} onClick={() => setMode("video")}><I.Video size={12} />Video MP4</button>
           <button className={`chip ${mode === "audio" ? "active" : ""}`} onClick={() => setMode("audio")}><I.Music size={12} />Audio MP3</button>
         </div>
+        {mode === "video" && (
+          <div className="row" style={{ marginBottom: 10 }}>
+            {["360", "720", "1080"].map((q) => (
+              <button key={q} className={`chip ${quality === q ? "active" : ""}`} onClick={() => setQuality(q)}>{q}p</button>
+            ))}
+          </div>
+        )}
         <div className="row">
           <input className="inp" style={{ flex: 1, minWidth: 200 }} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." />
           <button className="btn btn-p" disabled={loading || !url} onClick={go}>
@@ -1181,249 +1019,646 @@ export function YouTubeDownloader({ onToast }) {
   );
 }
 
-/* ============ TEMP MAIL v8 (merge + HTML fallback + delete) ============ */
-export function TempMail({ onToast }) {
-  const [mailbox, setMailbox] = useState(null);
-  const [msgs, setMsgs] = useState([]);
-  const [detail, setDetail] = useState(null);
+/* ============ MEDIA DOWNLOADER (Multi-Platform) ============ */
+export function MediaDownloader({ onToast }) {
+  const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [err, setErr] = useState("");
-  const [cooldown, setCooldown] = useState(0);
-  const [lastRefresh, setLastRefresh] = useState(null);
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [newCount, setNewCount] = useState(0);
+  const [r, setR] = useState(null);
+  const [e, setE] = useState("");
+  const [dlState, setDlState] = useState({});
 
-  const create = useCallback(async () => {
-    if (cooldown > 0 || loading) return;
-    setLoading(true); setErr("");
-    setCooldown(5);
+  const go = async () => {
+    if (!url) return;
+    setLoading(true); setE(""); setR(null); setDlState({});
     try {
-      const r = await fetch("/api", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "tempmail-create" }),
-      });
-      const d = await r.json();
-      if (!r.ok || d.error) {
-        setErr(d.error || "Gagal");
-        onToast?.(d.error || "Gagal", "error");
-      } else {
-        setMailbox(d); setMsgs([]); setDetail(null); setNewCount(0);
-        localStorage.setItem("alltool-mail-v8", JSON.stringify({ ...d, ts: Date.now() }));
-        onToast?.("Email sementara siap", "success");
+      const res = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "media", url }) });
+      const d = await res.json();
+      if (!res.ok) { setE(d.error || "Gagal"); onToast?.(d.error || "Gagal", "error"); }
+      else {
+        setR(d);
+        onToast?.(`Video dari ${d.platform} siap diunduh`, "success");
       }
-    } catch {
-      setErr("Kesalahan jaringan");
-      onToast?.("Kesalahan jaringan", "error");
-    }
+    } catch { setE("Kesalahan jaringan."); }
     setLoading(false);
-  }, [onToast, cooldown, loading]);
+  };
 
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const i = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
-    return () => clearInterval(i);
-  }, [cooldown]);
-
-  const inbox = useCallback(async (mb, silent = false) => {
-    if (!mb?.token) return;
-    if (!silent) setRefreshing(true);
+  const handleDownload = async (targetUrl, filename) => {
+    if (!targetUrl) return;
+    setDlState((s) => ({ ...s, dl: 0 }));
     try {
-      const r = await fetch("/api", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "tempmail-inbox", token: mb.token }),
-      });
-      const d = await r.json();
-      const newMsgs = Array.isArray(d) ? d : [];
-
-      setMsgs((prev) => {
-        if (newMsgs.length === 0) return prev;
-        const map = new Map();
-        prev.forEach((m) => map.set(String(m.id), m));
-        let added = 0;
-        newMsgs.forEach((m) => {
-          if (!map.has(String(m.id))) added++;
-          map.set(String(m.id), m);
-        });
-        if (added > 0 && silent) {
-          setNewCount(added);
-          onToast?.(`${added} email baru masuk!`, "success");
-        }
-        const merged = Array.from(map.values());
-        merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        return merged;
-      });
-
-      setLastRefresh(new Date());
-    } catch {}
-    if (!silent) setRefreshing(false);
-  }, [onToast]);
-
-  const open = (id) => {
-  const msg = msgs.find((m) => String(m.id) === String(id));
-  if (msg) setDetail({ ...msg, id });
-  else onToast?.("Pesan tidak ditemukan", "error");
-};
-
-  const deleteMsg = (id) => {
-    setMsgs((prev) => prev.filter((m) => String(m.id) !== String(id)));
-    if (detail?.id === id) setDetail(null);
-    onToast?.("Pesan dihapus dari daftar", "info");
+      const res = await fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
+      if (!res.ok) throw new Error(`${res.status}`);
+      const total = Number(res.headers.get("content-length")) || 0;
+      const reader = res.body.getReader();
+      const chunks = [];
+      let loaded = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value); loaded += value.length;
+        if (total) setDlState((s) => ({ ...s, dl: Math.min(99, Math.round((loaded / total) * 100)) }));
+        else setDlState((s) => ({ ...s, dl: Math.min(99, Math.round(loaded / 100000)) }));
+      }
+      const blob = new Blob(chunks);
+      const url2 = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url2; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url2), 5000);
+      setDlState((s) => ({ ...s, dl: 100 }));
+      onToast?.("Terunduh", "success");
+      setTimeout(() => setDlState({}), 1200);
+    } catch {
+      onToast?.("Fallback: buka di tab baru", "info");
+      window.open(targetUrl, "_blank", "noopener");
+      setDlState({});
+    }
   };
 
-  useEffect(() => {
-    const s = localStorage.getItem("alltool-mail-v8");
-    if (s) {
-      try {
-        const mb = JSON.parse(s);
-        if (mb.ts && Date.now() - mb.ts > 3500000) create();
-        else { setMailbox(mb); inbox(mb); }
-      } catch { create(); }
-    } else create();
-  }, [create, inbox]);
-
-  useEffect(() => {
-    if (!mailbox || !autoRefresh) return;
-    const i = setInterval(() => inbox(mailbox, true), 15000);
-    return () => clearInterval(i);
-  }, [mailbox, inbox, autoRefresh]);
-
-  const fmtTime = (s) => {
-    try { return new Date(s).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }); }
-    catch { return ""; }
-  };
+  const platforms = [
+    { name: "TikTok", icon: "Music" },
+    { name: "YouTube", icon: "Youtube" },
+    { name: "Instagram", icon: "Instagram" },
+    { name: "Facebook", icon: "Facebook" },
+    { name: "X/Twitter", icon: "Twitter" },
+    { name: "Pinterest", icon: "Image" },
+    { name: "Reddit", icon: "MessageCircle" },
+  ];
 
   return (
     <div className="col">
       <div className="card">
-        <div className="tag" style={{ marginBottom: 10 }}>ALAMAT EMAIL SEMENTARA</div>
-        {err && <div style={{ marginBottom: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{err}</div>}
+        <div className="tag" style={{ marginBottom: 10 }}>URL VIDEO / MEDIA</div>
         <div className="row">
-          <div className="inp" style={{ flex: 1, minWidth: 200, fontFamily: "monospace", fontSize: 12, wordBreak: "break-all", background: "var(--ps)", borderColor: "var(--bd-strong)" }}>
-            {loading && !mailbox ? "Memuat..." : mailbox?.email || "(kosong)"}
-          </div>
-          <button className="btn btn-s" onClick={() => { copy(mailbox?.email || ""); onToast?.("Email tersalin", "success"); }} disabled={!mailbox}>
-            <I.Copy size={14} />Salin
-          </button>
-          <button className="btn btn-p" disabled={loading || cooldown > 0} onClick={create}>
-            {loading ? <I.Loader2 size={14} className="spin" /> : cooldown > 0 ? <>{cooldown}s</> : <I.RefreshCw size={14} />}
-            {cooldown > 0 ? "" : "Baru"}
+          <input className="inp" style={{ flex: 1, minWidth: 200 }} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste URL dari platform apa saja..." />
+          <button className="btn btn-p" disabled={loading || !url} onClick={go}>
+            {loading ? <I.Loader2 size={16} className="spin" /> : <I.Download size={16} />}
+            {loading ? "Memproses..." : "Download"}
           </button>
         </div>
-        {mailbox && (
-          <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }}>
-            <div className="soft">
-              Provider: <b style={{ color: "var(--p)" }}>tempmail.lol</b> • Auto 15s
-              {lastRefresh && ` • ${lastRefresh.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
-            </div>
-            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, color: "var(--mut)" }}>
-              <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />Auto
-            </label>
-          </div>
-        )}
+        <div className="row" style={{ marginTop: 12 }}>
+          {platforms.map((p) => {
+            const C = I[p.icon] || I.Globe;
+            return (
+              <div key={p.name} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", background: "var(--ps)", borderRadius: 20, fontSize: 11, color: "var(--p)", fontWeight: 600 }}>
+                <C size={12} />{p.name}
+              </div>
+            );
+          })}
+        </div>
+        {e && <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{e}</div>}
       </div>
-
-      {detail ? (
+      {r && (
         <div className="card fade">
-          <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
-            <button className="btn btn-g" onClick={() => setDetail(null)}>
-              <I.ArrowLeft size={16} />Kembali
-            </button>
-            <button className="btn btn-g" onClick={() => deleteMsg(detail.id)} style={{ color: "var(--red)" }}>
-              <I.Trash2 size={16} />Hapus
-            </button>
-          </div>
-          <div style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.4 }}>{detail.subject || "(Tanpa subjek)"}</div>
-          <div className="mut" style={{ marginTop: 6 }}>
-            <b>Dari:</b> {detail.from?.address}
-          </div>
-          {detail.createdAt && <div className="soft" style={{ marginTop: 3 }}>{fmtTime(detail.createdAt)}</div>}
-
-          {detail.html && detail.html.length > 0 && detail.html[0] ? (
-            <div
-              style={{
-                marginTop: 16,
-                padding: 16,
-                border: "1.5px solid var(--bd)",
-                borderRadius: 12,
-                fontSize: 13,
-                lineHeight: 1.7,
-                background: "#fff",
-                color: "#0f172a",
-                overflowX: "auto",
-              }}
-              dangerouslySetInnerHTML={{ __html: detail.html[0] }}
-            />
-          ) : (
-            <div
-              style={{
-                marginTop: 16,
-                padding: 16,
-                border: "1.5px solid var(--bd)",
-                borderRadius: 12,
-                fontSize: 13,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                lineHeight: 1.7,
-              }}
-            >
-              {detail.text || "(Tidak ada isi pesan)"}
-            </div>
-          )}
+          <div className="tag" style={{ marginBottom: 10 }}>PLATFORM: {r.platform?.toUpperCase()}</div>
+          {r.thumbnail && <img src={r.thumbnail} style={{ width: "100%", borderRadius: 14, maxHeight: 300, objectFit: "cover" }} alt="Preview" />}
+          <div style={{ fontWeight: 700, marginTop: 12 }}>{r.title}</div>
+          <button className="btn btn-p" style={{ marginTop: 14, width: "100%" }} disabled={dlState.dl != null && dlState.dl < 100}
+            onClick={() => handleDownload(r.downloadUrl, `${(r.title || "media").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}.mp4`)}>
+            {dlState.dl != null && dlState.dl < 100 ? <><I.Loader2 size={14} className="spin" />{dlState.dl}%</> : <><I.Download size={14} />Download Video</>}
+          </button>
         </div>
-      ) : (
-        <>
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <div className="row" style={{ gap: 8 }}>
-              <b style={{ fontSize: 16 }}>Kotak Masuk {msgs.length > 0 && `(${msgs.length})`}</b>
-              {newCount > 0 && <span className="pill" style={{ background: "var(--green)", color: "#fff" }}>+{newCount} baru</span>}
-            </div>
-            <button className="btn btn-s" disabled={refreshing} onClick={() => { setNewCount(0); inbox(mailbox); }}>
-              {refreshing ? <I.Loader2 size={14} className="spin" /> : <I.RefreshCw size={14} />}Refresh
-            </button>
-          </div>
-          {msgs.length === 0 && !refreshing && (
-            <div className="card" style={{ textAlign: "center", padding: 48, color: "var(--mut)" }}>
-              <I.Mail size={44} style={{ margin: "0 auto 12px", opacity: 0.35 }} />
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Belum ada email masuk</div>
-              <div className="soft" style={{ marginTop: 6 }}>Kirim email ke alamat di atas untuk test</div>
-            </div>
-          )}
-          {msgs.map((m) => (
-            <div key={m.id} className="card card-int" style={{ position: "relative" }}>
-              <button
-                onClick={() => open(m.id)}
-                style={{ textAlign: "left", width: "100%", background: "none", border: "none", padding: 0 }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-                  <div style={{ flex: 1, minWidth: 0, paddingRight: 24 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {m.subject}
-                    </div>
-                    <div className="mut" style={{ marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {m.from?.address}
-                    </div>
-                  </div>
-                  <div className="soft" style={{ flexShrink: 0, textAlign: "right" }}>{fmtTime(m.createdAt)}</div>
-                </div>
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); deleteMsg(m.id); }}
-                className="btn btn-g"
-                style={{ position: "absolute", top: 8, right: 8, padding: 6, color: "var(--red)" }}
-              >
-                <I.X size={14} />
-              </button>
-            </div>
-          ))}
-        </>
       )}
     </div>
   );
 }
 
+/* ============ TERABOX DOWNLOADER ============ */
+export function TeraboxDownloader({ onToast }) {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [r, setR] = useState(null);
+  const [e, setE] = useState("");
+
+  const go = async () => {
+    if (!url) return;
+    setLoading(true); setE(""); setR(null);
+    try {
+      const res = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "terabox", url }) });
+      const d = await res.json();
+      if (!res.ok) { setE(d.error || "Gagal"); onToast?.(d.error || "Gagal", "error"); }
+      else { setR(d); onToast?.(`${d.files.length} file ditemukan`, "success"); }
+    } catch { setE("Kesalahan jaringan."); }
+    setLoading(false);
+  };
+
+  const fmtSize = (b) => {
+    if (!b) return "-";
+    if (b > 1e9) return (b / 1e9).toFixed(2) + " GB";
+    if (b > 1e6) return (b / 1e6).toFixed(2) + " MB";
+    if (b > 1e3) return (b / 1e3).toFixed(2) + " KB";
+    return b + " B";
+  };
+
+  return (
+    <div className="col">
+      <div className="card">
+        <div className="tag" style={{ marginBottom: 10 }}>URL SHARE TERABOX</div>
+        <div className="row">
+          <input className="inp" style={{ flex: 1, minWidth: 200 }} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://terabox.com/s/..." />
+          <button className="btn btn-p" disabled={loading || !url} onClick={go}>
+            {loading ? <I.Loader2 size={16} className="spin" /> : <I.FolderOpen size={16} />}
+            {loading ? "Memproses..." : "Ambil File"}
+          </button>
+        </div>
+        <div className="soft" style={{ marginTop: 10 }}>Ambil file dari link share TeraBox tanpa login.</div>
+        {e && <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{e}</div>}
+      </div>
+      {r && r.files && (
+        <div className="card">
+          <div className="tag" style={{ marginBottom: 12 }}>{r.files.length} FILE DITEMUKAN</div>
+          <div className="col">
+            {r.files.map((f, i) => (
+              <div key={i} className="card" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                {f.thumbnail && <img src={f.thumbnail} style={{ width: 50, height: 50, objectFit: "cover", borderRadius: 8 }} alt="" />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+                  <div className="soft" style={{ marginTop: 4 }}>{fmtSize(f.size)}</div>
+                </div>
+                <a className="btn btn-p" href={f.download} target="_blank" rel="noopener" style={{ fontSize: 12 }}>
+                  <I.Download size={12} />Unduh
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ KOMIK READER ============ */
+export function KomikReader({ onToast }) {
+  const [mode, setMode] = useState("home");
+  const [mangaList, setMangaList] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [detail, setDetail] = useState(null);
+  const [chapter, setChapter] = useState(null);
+  const [err, setErr] = useState("");
+
+  const loadPopular = async () => {
+    setLoading(true); setErr("");
+    try {
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-popular", page: 1 }) });
+      const d = await r.json();
+      if (d.error) setErr(d.error);
+      else setMangaList(d.manga_list || d.data || d || []);
+    } catch { setErr("Gagal load manga."); }
+    setLoading(false);
+  };
+
+  const doSearch = async () => {
+    if (!search.trim()) return loadPopular();
+    setLoading(true); setErr("");
+    try {
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-search", q: search }) });
+      const d = await r.json();
+      if (d.error) setErr(d.error);
+      else setMangaList(d.manga_list || d.data || d || []);
+    } catch { setErr("Gagal search."); }
+    setLoading(false);
+  };
+
+  const openDetail = async (endpoint) => {
+    setLoading(true); setErr(""); setMode("detail");
+    try {
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-detail", endpoint }) });
+      const d = await r.json();
+      if (d.error) setErr(d.error);
+      else setDetail(d);
+    } catch { setErr("Gagal load detail."); }
+    setLoading(false);
+  };
+
+  const openChapter = async (chapterEndpoint) => {
+    setLoading(true); setErr(""); setMode("reader");
+    try {
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-chapter", chapterEndpoint }) });
+      const d = await r.json();
+      if (d.error) setErr(d.error);
+      else setChapter(d);
+    } catch { setErr("Gagal load chapter."); }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadPopular(); }, []);
+
+  // Reader mode
+  if (mode === "reader" && chapter) {
+    const images = chapter.image_path || chapter.images || [];
+    return (
+      <div className="col">
+        <div className="card" style={{ position: "sticky", top: 70, zIndex: 10 }}>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <button className="btn btn-g" onClick={() => { setMode("detail"); setChapter(null); }}><I.ArrowLeft size={16} />Kembali</button>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{chapter.chapter_endpoint || chapter.title || "Chapter"}</div>
+          </div>
+        </div>
+        {loading && <div className="card" style={{ textAlign: "center", padding: 40 }}><I.Loader2 size={32} className="spin" style={{ color: "var(--p)" }} /></div>}
+        <div className="manga-pages">
+          {images.map((img, i) => {
+            const src = img.startsWith("http") ? img : `https://mangamint.kaedenoki.net${img.startsWith("/") ? img : "/" + img}`;
+            return <img key={i} src={src} alt={`page-${i + 1}`} loading="lazy" style={{ width: "100%", maxWidth: 800, display: "block", margin: "0 auto" }} />;
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Detail mode
+  if (mode === "detail" && detail) {
+    const info = detail.manga_detail || detail;
+    const chapters = detail.chapter_list || info.chapter_list || [];
+    return (
+      <div className="col">
+        <button className="btn btn-g" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("home"); setDetail(null); }}>
+          <I.ArrowLeft size={16} />Kembali
+        </button>
+        <div className="card">
+          <div className="row" style={{ gap: 16, alignItems: "flex-start" }}>
+            <img src={info.thumb || info.thumbnail} style={{ width: 120, borderRadius: 12, flexShrink: 0 }} alt={info.title} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>{info.title}</h2>
+              <div className="mut" style={{ fontSize: 12, marginBottom: 8 }}>{info.type || "Manga"} • {info.status || "-"}</div>
+              <div className="row">
+                {(info.genre_list || []).slice(0, 6).map((g, i) => (
+                  <span key={i} className="pill" style={{ fontSize: 10 }}>{g.genre_name || g}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mut" style={{ marginTop: 14, fontSize: 12, lineHeight: 1.7 }}>{info.synopsis || info.description || "Tidak ada sinopsis."}</div>
+        </div>
+        <div className="card">
+          <div className="tag" style={{ marginBottom: 10 }}>{chapters.length} CHAPTER</div>
+          <div style={{ maxHeight: 400, overflowY: "auto" }}>
+            {chapters.map((c, i) => (
+              <button key={i} onClick={() => openChapter(c.chapter_endpoint)} className="row" style={{ width: "100%", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid var(--border)", textAlign: "left", background: "transparent" }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{c.chapter_title || `Chapter ${i + 1}`}</span>
+                <span className="soft">{c.chapter_date || ""}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Home mode
+  return (
+    <div className="col">
+      <div className="card">
+        <div className="row">
+          <input className="inp" style={{ flex: 1 }} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && doSearch()} placeholder="Cari manga atau manhwa..." />
+          <button className="btn btn-p" onClick={doSearch} disabled={loading}>
+            {loading ? <I.Loader2 size={14} className="spin" /> : <I.Search size={14} />}Cari
+          </button>
+        </div>
+      </div>
+      {err && <div className="card" style={{ color: "var(--red)", textAlign: "center" }}>{err}</div>}
+      {loading && mangaList.length === 0 && <div className="card" style={{ textAlign: "center", padding: 40 }}><I.Loader2 size={32} className="spin" style={{ color: "var(--p)", margin: "0 auto" }} /></div>}
+      <div className="manga-grid">
+        {mangaList.map((m, i) => (
+          <div key={i} className="manga-card" onClick={() => openDetail(m.endpoint || m.manga_endpoint || m.slug)}>
+            <img src={m.thumb || m.thumbnail || m.image} alt={m.title} loading="lazy" />
+            <div className="manga-info">{m.title}</div>
+          </div>
+        ))}
+      </div>
+      {mangaList.length === 0 && !loading && <div className="card" style={{ textAlign: "center", padding: 40 }}><I.BookOpen size={40} style={{ opacity: 0.3, margin: "0 auto 10px" }} /><div className="mut">Tidak ada manga ditemukan</div></div>}
+    </div>
+  );
+}
+
+/* ============ AI CHAT (OpenRouter Multi-Model) ============ */
+export function AIChat({ onToast }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [model, setModel] = useState(DEFAULT_MODEL);
+  const [showSettings, setShowSettings] = useState(false);
+  const [keys, setKeys] = useState([]);
+  const [newKey, setNewKey] = useState("");
+  const [activeKeyIdx, setActiveKeyIdx] = useState(0);
+  const [history, setHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  // Load dari localStorage
+  useEffect(() => {
+    setModel(getStoredModel());
+    const k = getStoredKeys();
+    setKeys(k);
+    setActiveKeyIdx(k.length > 0 ? 0 : -1);
+    setHistory(getStoredHistory());
+  }, []);
+
+  // Scroll ke bawah saat pesan baru
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  const saveKeys = (newKeys) => {
+    setKeys(newKeys);
+    saveStoredKeys(newKeys);
+  };
+
+  const addKey = () => {
+    const k = newKey.trim();
+    if (!k) return;
+    if (!k.startsWith("sk-or-") && !k.startsWith("sk-")) {
+      onToast?.("API key harus diawali 'sk-or-' (OpenRouter) atau 'sk-'", "error");
+      return;
+    }
+    if (keys.includes(k)) {
+      onToast?.("API key sudah ada", "error");
+      return;
+    }
+    const newKeys = [...keys, k];
+    saveKeys(newKeys);
+    setNewKey("");
+    onToast?.("API key ditambahkan", "success");
+  };
+
+  const removeKey = (idx) => {
+    const newKeys = keys.filter((_, i) => i !== idx);
+    saveKeys(newKeys);
+    if (activeKeyIdx >= newKeys.length) setActiveKeyIdx(newKeys.length - 1);
+    onToast?.("API key dihapus", "info");
+  };
+
+  const changeModel = (m) => {
+    setModel(m);
+    setStoredModel(m);
+    onToast?.(`Model: ${AI_MODELS.find((x) => x.id === m)?.name}`, "success");
+  };
+
+  const clearChat = () => {
+    setMessages([]);
+    onToast?.("Chat dibersihkan", "info");
+  };
+
+  const sendMessage = async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+
+    const userMsg = { role: "user", content: text };
+    const newMsgs = [...messages, userMsg];
+    setMessages(newMsgs);
+    setInput("");
+    setLoading(true);
+
+    // Cek apakah butuh API key
+    const selectedModel = AI_MODELS.find((m) => m.id === model);
+    let apiKey = null;
+    if (!selectedModel?.free) {
+      if (keys.length === 0) {
+        onToast?.("Model premium butuh API key. Tambah di Pengaturan.", "error");
+        setLoading(false);
+        return;
+      }
+      apiKey = keys[activeKeyIdx >= 0 ? activeKeyIdx : 0];
+    } else if (keys.length > 0) {
+      apiKey = keys[activeKeyIdx >= 0 ? activeKeyIdx : 0];
+    }
+
+    // Bangun konteks
+    const systemMsg = { role: "system", content: SYSTEM_PROMPT };
+    const contextMsgs = [
+      systemMsg,
+      ...newMsgs.slice(-10), // Kirim 10 pesan terakhir untuk konteks
+    ];
+
+    try {
+      const r = await fetch("/api", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "ai-chat",
+          messages: contextMsgs,
+          model,
+          apiKey,
+        }),
+      });
+      const d = await r.json();
+      if (d.error) {
+        onToast?.(d.error, "error");
+        setMessages([...newMsgs, { role: "assistant", content: `Error: ${d.error}`, error: true }]);
+      } else {
+        const aiMsg = { role: "assistant", content: d.content };
+        const finalMsgs = [...newMsgs, aiMsg];
+        setMessages(finalMsgs);
+        // Simpan history
+        const newHistory = [
+          ...history,
+          { model, user: text.slice(0, 100), ai: d.content.slice(0, 200), ts: Date.now() },
+        ];
+        setHistory(newHistory.slice(-50));
+        saveStoredHistory(newHistory.slice(-50));
+      }
+    } catch (e) {
+      onToast?.("Gagal kirim pesan", "error");
+      setMessages([...newMsgs, { role: "assistant", content: "Kesalahan jaringan.", error: true }]);
+    }
+    setLoading(false);
+  };
+
+  const activeModel = AI_MODELS.find((m) => m.id === model);
+
+  return (
+    <div className="col">
+      {/* TOOLBAR */}
+      <div className="card">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <div className="row" style={{ gap: 8 }}>
+            <div className="ic" style={{ width: 36, height: 36 }}>
+              <I.Bot size={18} />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>{activeModel?.name || "AI"}</div>
+              <div className="soft">{activeModel?.provider} • {activeModel?.free ? "Gratis" : "Premium"}</div>
+            </div>
+          </div>
+          <div className="row">
+            <button className="btn btn-g" onClick={() => setShowHistory(!showHistory)} title="Riwayat"><I.Clock size={16} /></button>
+            <button className="btn btn-g" onClick={clearChat} title="Hapus chat"><I.Trash2 size={16} /></button>
+            <button className="btn btn-g" onClick={() => setShowSettings(!showSettings)} title="Pengaturan"><I.Settings size={16} /></button>
+          </div>
+        </div>
+      </div>
+
+      {/* SETTINGS PANEL */}
+      {showSettings && (
+        <div className="card fade">
+          <div className="tag" style={{ marginBottom: 12 }}>PILIH MODEL AI</div>
+          <div style={{ maxHeight: 300, overflowY: "auto" }} className="col">
+            {AI_MODELS.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => changeModel(m.id)}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: 12, borderRadius: 10, border: `1.5px solid ${model === m.id ? "var(--p)" : "var(--border)"}`,
+                  background: model === m.id ? "var(--ps)" : "transparent",
+                  textAlign: "left", gap: 10,
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>{m.name}</span>
+                    {m.free ? (
+                      <span className="pill" style={{ fontSize: 9, padding: "2px 6px", background: "rgba(34,197,94,0.15)", color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}>GRATIS</span>
+                    ) : (
+                      <span className="pill" style={{ fontSize: 9, padding: "2px 6px", background: "rgba(234,179,8,0.15)", color: "var(--yellow)", borderColor: "rgba(234,179,8,0.3)" }}>KEY</span>
+                    )}
+                  </div>
+                  <div className="soft" style={{ marginTop: 4 }}>{m.provider} • {m.context.toLocaleString()} tokens</div>
+                </div>
+                {model === m.id && <I.Check size={16} style={{ color: "var(--p)" }} />}
+              </button>
+            ))}
+          </div>
+
+          <div className="tag" style={{ marginTop: 20, marginBottom: 12 }}>API KEY (Opsional)</div>
+          <p className="mut" style={{ fontSize: 12, marginBottom: 12, lineHeight: 1.6 }}>
+            Model gratis tidak butuh API key. Untuk model premium atau akses tanpa batas, tambahkan API key dari{" "}
+            <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" style={{ color: "var(--p)", fontWeight: 600 }}>openrouter.ai/keys</a>.
+          </p>
+
+          {keys.length > 0 && (
+            <div className="col" style={{ marginBottom: 12 }}>
+              {keys.map((k, i) => (
+                <div key={i} style={{
+                  display: "flex", alignItems: "center", gap: 8, padding: 10,
+                  background: activeKeyIdx === i ? "var(--ps)" : "transparent",
+                  border: `1.5px solid ${activeKeyIdx === i ? "var(--p)" : "var(--border)"}`,
+                  borderRadius: 10, cursor: "pointer",
+                }} onClick={() => setActiveKeyIdx(i)}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: "monospace", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {k.slice(0, 20)}...{k.slice(-6)}
+                    </div>
+                    <div className="soft" style={{ marginTop: 2 }}>{activeKeyIdx === i ? "Aktif" : "Klik untuk aktifkan"}</div>
+                  </div>
+                  <button className="btn btn-g" onClick={(e) => { e.stopPropagation(); removeKey(i); }} style={{ color: "var(--red)", padding: 6 }}>
+                    <I.Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="row">
+            <input
+              className="inp"
+              type="password"
+              style={{ flex: 1, fontFamily: "monospace", fontSize: 12 }}
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addKey()}
+              placeholder="sk-or-v1-..."
+            />
+            <button className="btn btn-p" onClick={addKey} disabled={!newKey.trim()}><I.Plus size={14} />Tambah</button>
+          </div>
+
+          {history.length > 0 && (
+            <>
+              <div className="tag" style={{ marginTop: 20, marginBottom: 12 }}>RIWAYAT ({history.length})</div>
+              <button className="btn btn-danger" onClick={() => { setHistory([]); saveStoredHistory([]); onToast?.("Riwayat dihapus", "info"); }} style={{ width: "100%" }}>
+                <I.Trash2 size={14} />Hapus semua riwayat
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* HISTORY PANEL */}
+      {showHistory && (
+        <div className="card fade">
+          <div className="tag" style={{ marginBottom: 12 }}>RIWAYAT CHAT</div>
+          {history.length === 0 ? (
+            <div className="mut" style={{ textAlign: "center", padding: 20 }}>Belum ada riwayat</div>
+          ) : (
+            <div className="col">
+              {[...history].reverse().slice(0, 20).map((h, i) => (
+                <div key={i} style={{ padding: 12, border: "1px solid var(--border)", borderRadius: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.user}</div>
+                  <div className="soft" style={{ marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.ai}</div>
+                  <div className="soft" style={{ marginTop: 4, fontSize: 10 }}>{new Date(h.ts).toLocaleString("id-ID")}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* CHAT AREA */}
+      <div className="chat-container">
+        <div className="chat-messages">
+          {messages.length === 0 && (
+            <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-muted)" }}>
+              <I.Sparkles size={48} style={{ color: "var(--p)", margin: "0 auto 16px", opacity: 0.6 }} />
+              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Halo! Saya AllTool Assistant</div>
+              <div className="mut" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6 }}>
+                Tanya apa saja tentang AllTool — cara pakai tool, fitur, atau bantuan teknis.
+              </div>
+              <div className="row" style={{ marginTop: 20, justifyContent: "center" }}>
+                {[
+                  "Apa saja fitur AllTool?",
+                  "Cara download TikTok tanpa watermark?",
+                  "Bagaimana pakai Virus Scanner?",
+                  "Apa itu Temp Mail?",
+                ].map((q) => (
+                  <button key={q} className="chip" onClick={() => { setInput(q); }} style={{ fontSize: 11 }}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {messages.map((m, i) => (
+            <div key={i} className={`chat-msg ${m.role === "user" ? "user" : "ai"}`}>
+              <div className="chat-avatar">
+                {m.role === "user" ? <I.User size={16} /> : <I.Bot size={16} />}
+              </div>
+              <div className="chat-bubble" style={m.error ? { borderLeft: "3px solid var(--red)" } : {}}>
+                {m.content}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="chat-msg ai">
+              <div className="chat-avatar"><I.Bot size={16} /></div>
+              <div className="chat-bubble" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <span className="pulse">●</span>
+                <span className="pulse" style={{ animationDelay: "0.2s" }}>●</span>
+                <span className="pulse" style={{ animationDelay: "0.4s" }}>●</span>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+        <div className="chat-input-area">
+          <textarea
+            className="txa"
+            rows={1}
+            style={{ minHeight: 44, maxHeight: 120, resize: "none" }}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+            placeholder="Ketik pesan... (Enter kirim, Shift+Enter baris baru)"
+          />
+          <button className="btn btn-p" onClick={sendMessage} disabled={loading || !input.trim()} style={{ minWidth: 44, padding: "10px 14px" }}>
+            {loading ? <I.Loader2 size={16} className="spin" /> : <I.Send size={16} />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ IP LOOKUP ============ */
 export function IpLookup({ onToast }) {
   const [ip, setIp] = useState("");
   const [data, setData] = useState(null);
@@ -1454,7 +1689,7 @@ export function IpLookup({ onToast }) {
       </div>
       {data && <div className="card">
         {rows.map(([l, k]) => (
-          <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--bd)" }}>
+          <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
             <span className="mut">{l}</span>
             <span style={{ fontSize: 13, fontWeight: 600 }}>{String(data[k] ?? "-")}</span>
           </div>
@@ -1503,7 +1738,7 @@ export function ApkCompiler({ onToast }) {
     if (!valid) return;
     const manifest = {
       name, short_name: name.slice(0, 12), start_url: url,
-      display: "standalone", background_color: "#ffffff", theme_color: theme,
+      display: "standalone", background_color: "#0a0a14", theme_color: theme,
       icons: [
         { src: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=192&background=${theme.slice(1)}&color=fff`, sizes: "192x192", type: "image/png" },
         { src: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=512&background=${theme.slice(1)}&color=fff`, sizes: "512x512", type: "image/png" },
@@ -1520,144 +1755,17 @@ export function ApkCompiler({ onToast }) {
   const downloadAndroidProject = () => {
     if (!validHtml) return;
     const safe = name.replace(/[^a-zA-Z0-9]/g, "");
-
     const files = {
-      "README.md": `# ${name} - Android Project
-
-Project ini dibuat otomatis oleh AllTool APK Compiler.
-
-## Cara Build APK
-
-### Metode 1: Android Studio (Lokal)
-1. Buka folder ini di Android Studio
-2. Klik Build, lalu Build APK(s)
-3. APK tersedia di app/build/outputs/apk/debug/
-
-### Metode 2: GitHub Actions (Online, Gratis)
-1. Upload folder ini ke GitHub
-2. File workflow .github/workflows/build.yml sudah disertakan
-3. Push, otomatis build APK
-4. Download APK dari tab Actions / Artifacts
-
-## Info
-- Package: ${pkg}
-- Version: ${version}
-- HTML Anda ada di: app/src/main/assets/index.html
-`,
+      "README.md": `# ${name} - Android Project\n\nDibuat oleh AllTool APK Compiler.\n\n## Cara Build\n\n### Android Studio\n1. Buka folder di Android Studio\n2. Build, lalu Build APK\n\n### GitHub Actions\n1. Upload ke GitHub\n2. Workflow otomatis build APK\n3. Download dari tab Actions\n\nPackage: ${pkg}\nVersion: ${version}\n`,
       "app/src/main/assets/index.html": htmlCode,
-      "app/src/main/AndroidManifest.xml": `<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="${pkg}">
-    <uses-permission android:name="android.permission.INTERNET" />
-    <application
-        android:label="${name}"
-        android:usesCleartextTraffic="true"
-        android:theme="@android:style/Theme.NoTitleBar">
-        <activity android:name=".MainActivity"
-            android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
-</manifest>`,
-      [`app/src/main/java/${pkg.replace(/\./g, "/")}/MainActivity.java`]: `package ${pkg};
-
-import android.os.Bundle;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.webkit.WebSettings;
-import android.app.Activity;
-
-public class MainActivity extends Activity {
-    private WebView webView;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        webView = new WebView(this);
-        WebSettings s = webView.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true);
-        s.setAllowContentAccess(true);
-        s.setLoadWithOverviewMode(true);
-        s.setUseWideViewPort(true);
-        webView.setWebViewClient(new WebViewClient());
-        webView.loadUrl("file:///android_asset/index.html");
-        setContentView(webView);
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
-    }
-}`,
-      "app/build.gradle": `plugins {
-    id 'com.android.application'
-}
-
-android {
-    namespace '${pkg}'
-    compileSdk 34
-    defaultConfig {
-        applicationId "${pkg}"
-        minSdk 21
-        targetSdk 34
-        versionCode 1
-        versionName "${version}"
-    }
-    buildTypes {
-        release {
-            minifyEnabled false
-        }
-    }
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
-}
-
-dependencies {
-}`,
-      "build.gradle": `buildscript {
-    repositories { google(); mavenCentral() }
-    dependencies { classpath 'com.android.tools.build:gradle:8.1.0' }
-}
-allprojects {
-    repositories { google(); mavenCentral() }
-}`,
-      "settings.gradle": `include ':app'
-rootProject.name = "${safe}"`,
-      "gradle.properties": `android.useAndroidX=true
-org.gradle.jvmargs=-Xmx2048m`,
-      ".github/workflows/build.yml": `name: Build APK
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
-      - name: Build Debug APK
-        run: gradle assembleDebug
-      - uses: actions/upload-artifact@v3
-        with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk`,
+      "app/src/main/AndroidManifest.xml": `<?xml version="1.0" encoding="utf-8"?>\n<manifest xmlns:android="http://schemas.android.com/apk/res/android"\n    package="${pkg}">\n    <uses-permission android:name="android.permission.INTERNET" />\n    <application android:label="${name}" android:usesCleartextTraffic="true"\n        android:theme="@android:style/Theme.NoTitleBar">\n        <activity android:name=".MainActivity" android:exported="true"\n            android:configChanges="orientation|screenSize|keyboardHidden">\n            <intent-filter>\n                <action android:name="android.intent.action.MAIN" />\n                <category android:name="android.intent.category.LAUNCHER" />\n            </intent-filter>\n        </activity>\n    </application>\n</manifest>`,
+      [`app/src/main/java/${pkg.replace(/\./g, "/")}/MainActivity.java`]: `package ${pkg};\n\nimport android.os.Bundle;\nimport android.webkit.WebView;\nimport android.webkit.WebViewClient;\nimport android.webkit.WebSettings;\nimport android.app.Activity;\n\npublic class MainActivity extends Activity {\n    private WebView webView;\n    @Override\n    protected void onCreate(Bundle savedInstanceState) {\n        super.onCreate(savedInstanceState);\n        webView = new WebView(this);\n        WebSettings s = webView.getSettings();\n        s.setJavaScriptEnabled(true);\n        s.setDomStorageEnabled(true);\n        s.setAllowFileAccess(true);\n        webView.setWebViewClient(new WebViewClient());\n        webView.loadUrl("file:///android_asset/index.html");\n        setContentView(webView);\n    }\n    @Override\n    public void onBackPressed() {\n        if (webView.canGoBack()) webView.goBack();\n        else super.onBackPressed();\n    }\n}`,
+      "app/build.gradle": `plugins { id 'com.android.application' }\n\nandroid {\n    namespace '${pkg}'\n    compileSdk 34\n    defaultConfig {\n        applicationId "${pkg}"\n        minSdk 21\n        targetSdk 34\n        versionCode 1\n        versionName "${version}"\n    }\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n}\n`,
+      "build.gradle": `buildscript {\n    repositories { google(); mavenCentral() }\n    dependencies { classpath 'com.android.tools.build:gradle:8.1.0' }\n}\nallprojects { repositories { google(); mavenCentral() } }`,
+      "settings.gradle": `include ':app'\nrootProject.name = "${safe}"`,
+      "gradle.properties": `android.useAndroidX=true\norg.gradle.jvmargs=-Xmx2048m`,
+      ".github/workflows/build.yml": `name: Build APK\non:\n  push:\n    branches: [ main ]\n  workflow_dispatch:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v3\n      - uses: actions/setup-java@v3\n        with:\n          distribution: 'temurin'\n          java-version: '17'\n      - uses: gradle/gradle-build-action@v2\n      - run: gradle assembleDebug\n      - uses: actions/upload-artifact@v3\n        with:\n          name: app-debug\n          path: app/build/outputs/apk/debug/app-debug.apk`,
     };
-
     import("jszip").then(({ default: JSZip }) => {
       const zip = new JSZip();
       Object.entries(files).forEach(([path, content]) => zip.file(path, content));
@@ -1666,7 +1774,7 @@ jobs:
         const a = document.createElement("a");
         a.href = u; a.download = `${safe}_android_project.zip`; a.click();
         URL.revokeObjectURL(u);
-        onToast?.("Project Android terunduh. Baca README.md", "success");
+        onToast?.("Project Android terunduh", "success");
       });
     }).catch(() => onToast?.("Gagal generate ZIP", "error"));
   };
@@ -1685,10 +1793,10 @@ jobs:
   };
 
   const methods = [
-    { id: "pwabuilder", name: "PWABuilder", desc: "Microsoft. Kualitas terbaik. Untuk web app modern.", iconName: "Building2" },
-    { id: "appsgeyser", name: "AppsGeyser", desc: "Paling simpel. Input URL, dapat APK dalam 2 menit.", iconName: "Zap" },
-    { id: "webintoapp", name: "WebIntoApp", desc: "Cepat. Support HTML upload juga.", iconName: "Rocket" },
-    { id: "manual", name: "Build Manual (ZIP)", desc: "Download source Android project. Build via Android Studio atau GitHub Actions.", iconName: "Terminal" },
+    { id: "pwabuilder", name: "PWABuilder", desc: "Microsoft. Untuk web app modern.", iconName: "Building2" },
+    { id: "appsgeyser", name: "AppsGeyser", desc: "Paling simpel, dapat APK dalam 2 menit.", iconName: "Zap" },
+    { id: "webintoapp", name: "WebIntoApp", desc: "Cepat, support HTML upload.", iconName: "Rocket" },
+    { id: "manual", name: "Build Manual (ZIP)", desc: "Download source, build via Android Studio.", iconName: "Terminal" },
   ];
 
   const renderIcon = (iconName, size) => {
@@ -1702,7 +1810,7 @@ jobs:
         <div className="tag" style={{ marginBottom: 12 }}>PILIH METODE</div>
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
           {methods.map((m) => (
-            <button key={m.id} onClick={() => setMethod(m.id)} className="card card-int" style={{ textAlign: "left", border: method === m.id ? "1.5px solid var(--p)" : "1px solid var(--bd)" }}>
+            <button key={m.id} onClick={() => setMethod(m.id)} className="card card-int" style={{ textAlign: "left", border: method === m.id ? "1.5px solid var(--p)" : "1px solid var(--border)" }}>
               <div className="ic" style={{ marginBottom: 10 }}>{renderIcon(m.iconName, 20)}</div>
               <div style={{ fontSize: 14, fontWeight: 700 }}>{m.name}</div>
               <div className="mut" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5 }}>{m.desc}</div>
@@ -1730,7 +1838,6 @@ jobs:
               </div>
             </div>
           </div>
-
           <div className="row" style={{ marginTop: 16 }}>
             {method === "pwabuilder" && <button className="btn btn-p" disabled={!valid} onClick={openPwaBuilder}><I.ExternalLink size={14} />Buka PWABuilder</button>}
             {method === "appsgeyser" && <button className="btn btn-p" disabled={!valid} onClick={openAppsGeyser}><I.ExternalLink size={14} />Buka AppsGeyser</button>}
@@ -1762,22 +1869,13 @@ jobs:
               <I.Download size={14} />Download Project Android (.zip)
             </button>
           </div>
-
-          <div className="card" style={{ background: "var(--ps)", border: "none" }}>
-            <div className="tag" style={{ marginBottom: 8 }}>CARA BUILD APK DARI PROJECT INI</div>
-            <ol style={{ fontSize: 13, lineHeight: 1.9, paddingLeft: 20 }}>
-              <li>Extract ZIP yang Anda download</li>
-              <li><b>Metode A - Android Studio:</b> Buka folder di Android Studio, klik Build, lalu pilih Build APK</li>
-              <li><b>Metode B - GitHub Actions (gratis):</b> Upload project ke GitHub, workflow sudah disertakan, APK otomatis ter-build, download dari Actions tab</li>
-            </ol>
-          </div>
         </>
       )}
     </div>
   );
 }
 
-/* ============ UTILITY ============ */
+/* ============ COLOR PICKER ============ */
 export function ColorPicker({ onToast }) {
   const [c, setC] = useState("#7c3aed");
   const h2r = (h) => { const x = h.replace("#", ""); return { r: parseInt(x.slice(0, 2), 16) || 0, g: parseInt(x.slice(2, 4), 16) || 0, b: parseInt(x.slice(4, 6), 16) || 0 }; };
@@ -1809,7 +1907,7 @@ export function ColorPicker({ onToast }) {
         </div>
         <div className="col" style={{ marginTop: 16 }}>
           {fmts.map(([n, v]) => (
-            <div key={n} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 14, border: "1.5px solid var(--bd)", borderRadius: 12 }}>
+            <div key={n} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 14, border: "1.5px solid var(--border)", borderRadius: 12 }}>
               <div><div className="mut">{n}</div><div style={{ fontFamily: "monospace", fontSize: 15, marginTop: 3 }}>{v}</div></div>
               <button className="btn btn-g" onClick={() => { copy(v); onToast?.(`${n} tersalin`, "success"); }}><I.Copy size={16} /></button>
             </div>
@@ -1819,13 +1917,14 @@ export function ColorPicker({ onToast }) {
       <div className="card">
         <div className="tag" style={{ marginBottom: 12 }}>PALET CEPAT</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 10 }}>
-          {pal.map((x) => <button key={x} onClick={() => setC(x)} style={{ aspectRatio: 1, background: x, borderRadius: 14, cursor: "pointer", boxShadow: "var(--shadow)" }} />)}
+          {pal.map((x) => <button key={x} onClick={() => setC(x)} style={{ aspectRatio: 1, background: x, borderRadius: 14, cursor: "pointer", boxShadow: "var(--shadow)", border: "1px solid var(--border)" }} />)}
         </div>
       </div>
     </div>
   );
 }
 
+/* ============ TEXT TO SPEECH ============ */
 export function TextToSpeech() {
   const [t, setT] = useState("");
   const [voices, setVoices] = useState([]);
@@ -1874,4 +1973,4 @@ export function TextToSpeech() {
       </div>
     </div>
   );
-               }
+                }
