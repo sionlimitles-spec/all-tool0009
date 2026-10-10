@@ -1261,21 +1261,11 @@ export function TempMail({ onToast }) {
     if (!silent) setRefreshing(false);
   }, [onToast]);
 
-  const open = async (id) => {
-    if (!mailbox?.token) return;
-    setLoading(true);
-    try {
-      const r = await fetch("/api", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "tempmail-read", token: mailbox.token, id }),
-      });
-      const d = await r.json();
-      if (d.error) onToast?.(d.error, "error");
-      else setDetail({ ...d, id });
-    } catch { onToast?.("Gagal buka email", "error"); }
-    setLoading(false);
-  };
+  const open = (id) => {
+  const msg = msgs.find((m) => String(m.id) === String(id));
+  if (msg) setDetail({ ...msg, id });
+  else onToast?.("Pesan tidak ditemukan", "error");
+};
 
   const deleteMsg = (id) => {
     setMsgs((prev) => prev.filter((m) => String(m.id) !== String(id)));
