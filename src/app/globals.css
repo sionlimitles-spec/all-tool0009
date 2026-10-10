@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ============ THEME VARIABLES ============ */
 :root {
   /* Light mode (fallback) */
@@ -653,4 +657,4 @@ img { max-width: 100%; display: block; }
   .hdr { padding: 12px 16px; }
   .chat-bubble { max-width: 90%; }
   .manga-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
-                    }
+  }
