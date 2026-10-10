@@ -149,7 +149,7 @@ async function inboxTempMail(token) {
     from: { address: m.from, name: m.from },
     subject: m.subject || "(Tanpa subjek)",
     intro: m.subject || "(Tanpa subjek)",
-    createdAt: new Date(m.date).toISOString(),
+    createdAt: m.date ? new Date(m.date).toISOString() : new Date().toISOString(),
     seen: false,
   }));
 }
@@ -161,12 +161,36 @@ async function readTempMail(token, id) {
   if (d.expired) throw new Error("Inbox sudah kedaluwarsa.");
   const email = (d.emails || []).find((e) => String(e.id || e.date) === String(id));
   if (!email) throw new Error("Email tidak ditemukan.");
+
+  let text = email.body || email.text || email.textBody || email.content || "";
+  let htmlContent = email.html || email.htmlBody || "";
+
+  if (!text && htmlContent) {
+    text = String(htmlContent)
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n\n")
+      .replace(/<\/div>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  if (!text) text = "(Pesan tidak memiliki isi teks)";
+
   return {
     subject: email.subject || "(Tanpa subjek)",
     from: { address: email.from, name: email.from },
-    text: email.body || "(Tidak ada isi teks)",
-    html: email.html ? [email.html] : [],
-    createdAt: new Date(email.date).toISOString(),
+    text,
+    html: htmlContent ? [htmlContent] : [],
+    createdAt: email.date ? new Date(email.date).toISOString() : new Date().toISOString(),
   };
 }
 
@@ -298,7 +322,7 @@ export async function GET(req) {
   return Response.json({
     ok: true,
     service: "AllTool API",
-    version: "7.0",
+    version: "7.1",
     endpoints: ["tiktok", "youtube", "tempmail-create", "tempmail-inbox", "tempmail-read", "ip-lookup", "scan-url", "scan-url-result", "scan-hash"],
   });
-      }
+}
