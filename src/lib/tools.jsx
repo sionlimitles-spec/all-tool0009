@@ -2,7 +2,11 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import * as I from "lucide-react";
-import { AI_MODELS, DEFAULT_MODEL, SYSTEM_PROMPT, getStoredModel, setStoredModel, getStoredKeys, saveStoredKeys, getStoredHistory, saveStoredHistory } from "./ai-config";
+import {
+  PROVIDERS, AI_MODELS, DEFAULT_MODEL, DEFAULT_PROVIDER, SYSTEM_PROMPT,
+  getStoredModel, setStoredModel, getStoredKeys, saveStoredKeys,
+  getStoredHistory, saveStoredHistory,
+} from "./ai-config";
 
 /* ============ UTILS ============ */
 export const copy = async (t) => {
@@ -17,6 +21,40 @@ export const copy = async (t) => {
   }
 };
 const fmt = (n) => !n ? "0" : n > 1e6 ? (n / 1e6).toFixed(1) + "M" : n > 1e3 ? (n / 1e3).toFixed(1) + "K" : String(n);
+
+/* Force download via proxy dengan dl=1 */
+async function forceDownload(targetUrl, filename, key, setState, onToast) {
+  if (!targetUrl) { onToast?.("URL tidak tersedia", "error"); return; }
+  setState((s) => ({ ...s, [key]: 0 }));
+  try {
+    const res = await fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}&dl=1`);
+    if (!res.ok) throw new Error(`${res.status}`);
+    const total = Number(res.headers.get("content-length")) || 0;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let loaded = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); loaded += value.length;
+      if (total) setState((s) => ({ ...s, [key]: Math.min(99, Math.round((loaded / total) * 100)) }));
+      else setState((s) => ({ ...s, [key]: Math.min(99, Math.round(loaded / 100000)) }));
+    }
+    const blob = new Blob(chunks);
+    const url2 = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url2; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url2), 5000);
+    setState((s) => ({ ...s, [key]: 100 }));
+    onToast?.(`${filename} terunduh`, "success");
+    setTimeout(() => setState((s) => { const n = { ...s }; delete n[key]; return n; }), 1200);
+  } catch (e) {
+    onToast?.(`Fallback: buka di tab baru`, "info");
+    window.open(targetUrl, "_blank", "noopener");
+    setState((s) => { const n = { ...s }; delete n[key]; return n; });
+  }
+}
 
 /* ============ TEXT ============ */
 export function WordCounter() {
@@ -180,7 +218,6 @@ export function HtmlEditor() {
     body { font-family: sans-serif; padding: 20px; text-align: center; background: #0a0a14; color: #fff; }
     h1 { background: linear-gradient(135deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 32px; }
     button { padding: 10px 20px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-    button:hover { box-shadow: 0 0 20px rgba(167,139,250,0.6); }
   </style>
 </head>
 <body>
@@ -679,7 +716,7 @@ export function VirusScanner({ onToast }) {
       const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "scan-url", url }) });
       const d = await r.json();
       if (d.error) { setErr(d.error); onToast?.(d.error, "error"); }
-      else { setResult({ type: "url-pending", ...d }); onToast?.("Menganalisis URL, tunggu ~15 detik...", "info"); pollUrl(d.scanId, 0); }
+      else { setResult({ type: "url-pending", ...d }); onToast?.("Menganalisis URL...", "info"); pollUrl(d.scanId, 0); }
     } catch { setErr("Kesalahan jaringan"); }
   };
 
@@ -772,7 +809,7 @@ export function VirusScanner({ onToast }) {
               </div>
             ))}
           </div>
-          <a className="btn btn-s" style={{ marginTop: 14, display: "inline-flex" }} href={`https://urlscan.io/result/${result.scanId}/`} target="_blank" rel="noopener"><I.ExternalLink size={14} />Lihat Laporan Lengkap</a>
+          <a className="btn btn-s" style={{ marginTop: 14, display: "inline-flex" }} href={`https://urlscan.io/result/${result.scanId}/`} target="_blank" rel="noopener"><I.ExternalLink size={14} />Lihat Laporan</a>
         </div>
       )}
       {result?.type === "hash" && (
@@ -803,7 +840,7 @@ export function VirusScanner({ onToast }) {
   );
 }
 
-/* ============ TIKTOK DOWNLOADER (1080p) ============ */
+/* ============ TIKTOK DOWNLOADER ============ */
 export function TikTokDownloader({ onToast }) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -816,48 +853,10 @@ export function TikTokDownloader({ onToast }) {
     try {
       const res = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "tiktok", url }) });
       const d = await res.json();
-      if (!res.ok) onToast?.(d.error || "Gagal memproses.", "error");
-      else {
-        setR(d);
-        onToast?.("Video siap diunduh", "success");
-        // Auto-download HD no-watermark
-        setTimeout(() => handleDownload(d.hd || d.noWm, `${(d.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_hd.mp4`, "hd"), 300);
-      }
+      if (!res.ok) onToast?.(d.error || "Gagal", "error");
+      else { setR(d); onToast?.("Video siap. Klik tombol download.", "success"); }
     } catch { onToast?.("Kesalahan jaringan.", "error"); }
     setLoading(false);
-  };
-
-  const handleDownload = async (targetUrl, filename, key) => {
-    if (!targetUrl) return;
-    setDlState((s) => ({ ...s, [key]: 0 }));
-    try {
-      const res = await fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
-      if (!res.ok) throw new Error(`${res.status}`);
-      const total = Number(res.headers.get("content-length")) || 0;
-      const reader = res.body.getReader();
-      const chunks = [];
-      let loaded = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value); loaded += value.length;
-        if (total) setDlState((s) => ({ ...s, [key]: Math.min(99, Math.round((loaded / total) * 100)) }));
-        else setDlState((s) => ({ ...s, [key]: Math.min(99, Math.round(loaded / 100000)) }));
-      }
-      const blob = new Blob(chunks);
-      const url2 = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url2; a.download = filename;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url2), 5000);
-      setDlState((s) => ({ ...s, [key]: 100 }));
-      onToast?.(`${filename} terunduh`, "success");
-      setTimeout(() => setDlState((s) => { const n = { ...s }; delete n[key]; return n; }), 1200);
-    } catch {
-      onToast?.("Fallback: buka di tab baru", "info");
-      window.open(targetUrl, "_blank", "noopener");
-      setDlState((s) => { const n = { ...s }; delete n[key]; return n; });
-    }
   };
 
   return (
@@ -867,11 +866,10 @@ export function TikTokDownloader({ onToast }) {
         <div className="row">
           <input className="inp" style={{ flex: 1, minWidth: 200 }} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.tiktok.com/@user/video/..." />
           <button className="btn btn-p" disabled={loading || !url} onClick={go}>
-            {loading ? <I.Loader2 size={16} className="spin" /> : <I.Download size={16} />}
-            {loading ? "Memproses..." : "Download HD 1080p"}
+            {loading ? <I.Loader2 size={16} className="spin" /> : <I.Search size={16} />}
+            {loading ? "Memproses..." : "Ambil Video"}
           </button>
         </div>
-        <div className="soft" style={{ marginTop: 10 }}>Download otomatis resolusi HD 1080p tanpa watermark.</div>
       </div>
       {r && (
         <div className="card fade">
@@ -889,16 +887,16 @@ export function TikTokDownloader({ onToast }) {
               </div>
               <div className="col" style={{ marginTop: 14 }}>
                 <button className="btn btn-p" disabled={dlState["hd"] != null && dlState["hd"] < 100}
-                  onClick={() => dlState["hd"] != null && dlState["hd"] < 100 ? null : handleDownload(r.hd, `${(r.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_hd.mp4`, "hd")}>
-                  {dlState["hd"] != null && dlState["hd"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["hd"]}%</> : <><I.Download size={14} />HD 1080p</>}
+                  onClick={() => forceDownload(r.hd || r.noWm, `${(r.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_hd.mp4`, "hd", setDlState, onToast)}>
+                  {dlState["hd"] != null && dlState["hd"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["hd"]}%</> : <><I.Download size={14} />Download HD 1080p</>}
                 </button>
                 <button className="btn btn-s" disabled={dlState["video"] != null && dlState["video"] < 100}
-                  onClick={() => dlState["video"] != null && dlState["video"] < 100 ? null : handleDownload(r.noWm, `${(r.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_nowm.mp4`, "video")}>
+                  onClick={() => forceDownload(r.noWm, `${(r.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_nowm.mp4`, "video", setDlState, onToast)}>
                   {dlState["video"] != null && dlState["video"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["video"]}%</> : <><I.Download size={14} />No Watermark</>}
                 </button>
                 {r.music && (
                   <button className="btn btn-s" disabled={dlState["music"] != null && dlState["music"] < 100}
-                    onClick={() => dlState["music"] != null && dlState["music"] < 100 ? null : handleDownload(r.music, "audio.mp3", "music")}>
+                    onClick={() => forceDownload(r.music, "audio.mp3", "music", setDlState, onToast)}>
                     {dlState["music"] != null && dlState["music"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["music"]}%</> : <><I.Music size={14} />Audio MP3</>}
                   </button>
                 )}
@@ -911,7 +909,7 @@ export function TikTokDownloader({ onToast }) {
   );
 }
 
-/* ============ YOUTUBE DOWNLOADER (1080p) ============ */
+/* ============ YOUTUBE DOWNLOADER ============ */
 export function YouTubeDownloader({ onToast }) {
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState("video");
@@ -929,46 +927,9 @@ export function YouTubeDownloader({ onToast }) {
       const res = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "youtube", url, mode, quality }) });
       const d = await res.json();
       if (!res.ok) { setE(d.error || "Gagal"); if (d.videoId) setFb(d.videoId); onToast?.(d.error || "Gagal", "error"); }
-      else {
-        setR(d);
-        onToast?.("Video siap diunduh", "success");
-        setTimeout(() => handleDownload(d.downloadUrl, `${(d.title || "youtube").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}.${mode === "audio" ? "mp3" : "mp4"}`, "video"), 300);
-      }
+      else { setR(d); onToast?.("Video siap.", "success"); }
     } catch { setE("Kesalahan jaringan."); }
     setLoading(false);
-  };
-
-  const handleDownload = async (targetUrl, filename, key) => {
-    if (!targetUrl) return;
-    setDlState((s) => ({ ...s, [key]: 0 }));
-    try {
-      const res = await fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
-      if (!res.ok) throw new Error(`${res.status}`);
-      const total = Number(res.headers.get("content-length")) || 0;
-      const reader = res.body.getReader();
-      const chunks = [];
-      let loaded = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value); loaded += value.length;
-        if (total) setDlState((s) => ({ ...s, [key]: Math.min(99, Math.round((loaded / total) * 100)) }));
-        else setDlState((s) => ({ ...s, [key]: Math.min(99, Math.round(loaded / 200000)) }));
-      }
-      const blob = new Blob(chunks);
-      const url2 = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url2; a.download = filename;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url2), 5000);
-      setDlState((s) => ({ ...s, [key]: 100 }));
-      onToast?.("Terunduh", "success");
-      setTimeout(() => setDlState((s) => { const n = { ...s }; delete n[key]; return n; }), 1200);
-    } catch {
-      onToast?.("Fallback: buka di tab baru", "info");
-      window.open(targetUrl, "_blank", "noopener");
-      setDlState((s) => { const n = { ...s }; delete n[key]; return n; });
-    }
   };
 
   return (
@@ -989,8 +950,8 @@ export function YouTubeDownloader({ onToast }) {
         <div className="row">
           <input className="inp" style={{ flex: 1, minWidth: 200 }} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." />
           <button className="btn btn-p" disabled={loading || !url} onClick={go}>
-            {loading ? <I.Loader2 size={16} className="spin" /> : <I.Youtube size={16} />}
-            {loading ? "Memproses..." : "Download"}
+            {loading ? <I.Loader2 size={16} className="spin" /> : <I.Search size={16} />}
+            {loading ? "Memproses..." : "Ambil Video"}
           </button>
         </div>
         {e && <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{e}</div>}
@@ -998,7 +959,7 @@ export function YouTubeDownloader({ onToast }) {
       {fb && !r && (
         <div className="card">
           <img src={`https://img.youtube.com/vi/${fb}/maxresdefault.jpg`} style={{ width: "100%", borderRadius: 14 }} alt="Thumbnail" />
-          <div className="mut" style={{ marginTop: 12 }}>Server downloader sibuk. Klik tombol untuk coba lagi.</div>
+          <div className="mut" style={{ marginTop: 12 }}>Server sibuk. Klik tombol untuk coba lagi.</div>
           <button className="btn btn-p" style={{ marginTop: 12 }} onClick={go} disabled={loading}><I.RefreshCw size={14} />Coba Lagi</button>
         </div>
       )}
@@ -1008,8 +969,8 @@ export function YouTubeDownloader({ onToast }) {
           <div style={{ fontWeight: 700, marginTop: 14 }}>{r.title}</div>
           <div className="row" style={{ marginTop: 14 }}>
             <button className="btn btn-p" disabled={dlState["video"] != null && dlState["video"] < 100}
-              onClick={() => handleDownload(r.downloadUrl, `${(r.title || "youtube").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}.${mode === "audio" ? "mp3" : "mp4"}`, "video")}>
-              {dlState["video"] != null && dlState["video"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["video"]}%</> : <><I.Download size={14} />Unduh Ulang</>}
+              onClick={() => forceDownload(r.downloadUrl, `${(r.title || "youtube").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}.${mode === "audio" ? "mp3" : "mp4"}`, "video", setDlState, onToast)}>
+              {dlState["video"] != null && dlState["video"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["video"]}%</> : <><I.Download size={14} />Download</>}
             </button>
             <a className="btn btn-s" href={r.downloadUrl} target="_blank" rel="noopener"><I.ExternalLink size={14} />Buka Manual</a>
           </div>
@@ -1019,7 +980,7 @@ export function YouTubeDownloader({ onToast }) {
   );
 }
 
-/* ============ MEDIA DOWNLOADER (Multi-Platform) ============ */
+/* ============ MEDIA DOWNLOADER ============ */
 export function MediaDownloader({ onToast }) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1033,56 +994,16 @@ export function MediaDownloader({ onToast }) {
     try {
       const res = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "media", url }) });
       const d = await res.json();
-      if (!res.ok) { setE(d.error || "Gagal"); onToast?.(d.error || "Gagal", "error"); }
-      else {
-        setR(d);
-        onToast?.(`Video dari ${d.platform} siap diunduh`, "success");
-      }
+      if (!res.ok) { setE(d.error || "Gagal ambil media"); onToast?.(d.error || "Gagal", "error"); }
+      else { setR(d); onToast?.(`Media dari ${d.platform} siap`, "success"); }
     } catch { setE("Kesalahan jaringan."); }
     setLoading(false);
   };
 
-  const handleDownload = async (targetUrl, filename) => {
-    if (!targetUrl) return;
-    setDlState((s) => ({ ...s, dl: 0 }));
-    try {
-      const res = await fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
-      if (!res.ok) throw new Error(`${res.status}`);
-      const total = Number(res.headers.get("content-length")) || 0;
-      const reader = res.body.getReader();
-      const chunks = [];
-      let loaded = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value); loaded += value.length;
-        if (total) setDlState((s) => ({ ...s, dl: Math.min(99, Math.round((loaded / total) * 100)) }));
-        else setDlState((s) => ({ ...s, dl: Math.min(99, Math.round(loaded / 100000)) }));
-      }
-      const blob = new Blob(chunks);
-      const url2 = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url2; a.download = filename;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url2), 5000);
-      setDlState((s) => ({ ...s, dl: 100 }));
-      onToast?.("Terunduh", "success");
-      setTimeout(() => setDlState({}), 1200);
-    } catch {
-      onToast?.("Fallback: buka di tab baru", "info");
-      window.open(targetUrl, "_blank", "noopener");
-      setDlState({});
-    }
-  };
-
   const platforms = [
-    { name: "TikTok", icon: "Music" },
-    { name: "YouTube", icon: "Youtube" },
-    { name: "Instagram", icon: "Instagram" },
-    { name: "Facebook", icon: "Facebook" },
-    { name: "X/Twitter", icon: "Twitter" },
-    { name: "Pinterest", icon: "Image" },
-    { name: "Reddit", icon: "MessageCircle" },
+    { name: "TikTok", icon: "Music" }, { name: "YouTube", icon: "Youtube" },
+    { name: "Instagram", icon: "Instagram" }, { name: "Facebook", icon: "Facebook" },
+    { name: "X", icon: "Twitter" }, { name: "Pinterest", icon: "Image" },
   ];
 
   return (
@@ -1090,10 +1011,10 @@ export function MediaDownloader({ onToast }) {
       <div className="card">
         <div className="tag" style={{ marginBottom: 10 }}>URL VIDEO / MEDIA</div>
         <div className="row">
-          <input className="inp" style={{ flex: 1, minWidth: 200 }} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste URL dari platform apa saja..." />
-          <button className="btn btn-p" disabled={loading || !url} onClick={go}>
-            {loading ? <I.Loader2 size={16} className="spin" /> : <I.Download size={16} />}
-            {loading ? "Memproses..." : "Download"}
+          <input className="inp" style={{ flex: 1, minWidth: 200 }} value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} placeholder="Paste URL dari platform apa saja..." />
+          <button className="btn btn-p" disabled={loading || !url} onClick={go} style={{ minWidth: 120 }}>
+            {loading ? <I.Loader2 size={16} className="spin" /> : <I.Search size={16} />}
+            {loading ? "Proses..." : "Ambil Media"}
           </button>
         </div>
         <div className="row" style={{ marginTop: 12 }}>
@@ -1110,13 +1031,15 @@ export function MediaDownloader({ onToast }) {
       </div>
       {r && (
         <div className="card fade">
-          <div className="tag" style={{ marginBottom: 10 }}>PLATFORM: {r.platform?.toUpperCase()}</div>
+          <div className="tag" style={{ marginBottom: 10 }}>PLATFORM: {(r.platform || "").toUpperCase()}</div>
           {r.thumbnail && <img src={r.thumbnail} style={{ width: "100%", borderRadius: 14, maxHeight: 300, objectFit: "cover" }} alt="Preview" />}
           <div style={{ fontWeight: 700, marginTop: 12 }}>{r.title}</div>
-          <button className="btn btn-p" style={{ marginTop: 14, width: "100%" }} disabled={dlState.dl != null && dlState.dl < 100}
-            onClick={() => handleDownload(r.downloadUrl, `${(r.title || "media").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}.mp4`)}>
-            {dlState.dl != null && dlState.dl < 100 ? <><I.Loader2 size={14} className="spin" />{dlState.dl}%</> : <><I.Download size={14} />Download Video</>}
-          </button>
+          {r.downloadUrl && (
+            <button className="btn btn-p" style={{ marginTop: 14, width: "100%" }} disabled={dlState.dl != null && dlState.dl < 100}
+              onClick={() => forceDownload(r.downloadUrl, `${(r.title || "media").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}.mp4`, "dl", setDlState, onToast)}>
+              {dlState.dl != null && dlState.dl < 100 ? <><I.Loader2 size={14} className="spin" />{dlState.dl}%</> : <><I.Download size={14} />Download Video</>}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -1161,10 +1084,9 @@ export function TeraboxDownloader({ onToast }) {
             {loading ? "Memproses..." : "Ambil File"}
           </button>
         </div>
-        <div className="soft" style={{ marginTop: 10 }}>Ambil file dari link share TeraBox tanpa login.</div>
         {e && <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{e}</div>}
       </div>
-      {r && r.files && (
+      {r?.files && (
         <div className="card">
           <div className="tag" style={{ marginBottom: 12 }}>{r.files.length} FILE DITEMUKAN</div>
           <div className="col">
@@ -1175,13 +1097,179 @@ export function TeraboxDownloader({ onToast }) {
                   <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
                   <div className="soft" style={{ marginTop: 4 }}>{fmtSize(f.size)}</div>
                 </div>
-                <a className="btn btn-p" href={f.download} target="_blank" rel="noopener" style={{ fontSize: 12 }}>
-                  <I.Download size={12} />Unduh
-                </a>
+                <a className="btn btn-p" href={f.download} target="_blank" rel="noopener" style={{ fontSize: 12 }}><I.Download size={12} />Unduh</a>
               </div>
             ))}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ TEMP MAIL ============ */
+export function TempMail({ onToast }) {
+  const [mailbox, setMailbox] = useState(null);
+  const [msgs, setMsgs] = useState([]);
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [err, setErr] = useState("");
+  const [cooldown, setCooldown] = useState(0);
+  const [lastRefresh, setLastRefresh] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [newCount, setNewCount] = useState(0);
+
+  const create = useCallback(async () => {
+    if (cooldown > 0 || loading) return;
+    setLoading(true); setErr(""); setCooldown(5);
+    try {
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "tempmail-create" }) });
+      const d = await r.json();
+      if (!r.ok || d.error) { setErr(d.error || "Gagal"); onToast?.(d.error || "Gagal", "error"); }
+      else {
+        setMailbox(d); setMsgs([]); setDetail(null); setNewCount(0);
+        localStorage.setItem("alltool-mail-v9", JSON.stringify({ ...d, ts: Date.now() }));
+        onToast?.("Email siap", "success");
+      }
+    } catch { setErr("Kesalahan jaringan"); onToast?.("Kesalahan jaringan", "error"); }
+    setLoading(false);
+  }, [onToast, cooldown, loading]);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const i = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(i);
+  }, [cooldown]);
+
+  const inbox = useCallback(async (mb, silent = false) => {
+    if (!mb?.token) return;
+    if (!silent) setRefreshing(true);
+    try {
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "tempmail-inbox", token: mb.token }) });
+      const d = await r.json();
+      const newMsgs = Array.isArray(d) ? d : [];
+      setMsgs((prev) => {
+        if (newMsgs.length === 0) return prev;
+        const map = new Map();
+        prev.forEach((m) => map.set(String(m.id), m));
+        let added = 0;
+        newMsgs.forEach((m) => { if (!map.has(String(m.id))) added++; map.set(String(m.id), m); });
+        if (added > 0 && silent) { setNewCount(added); onToast?.(`${added} email baru!`, "success"); }
+        const merged = Array.from(map.values());
+        merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        return merged;
+      });
+      setLastRefresh(new Date());
+    } catch {}
+    if (!silent) setRefreshing(false);
+  }, [onToast]);
+
+  const open = (id) => {
+    const msg = msgs.find((m) => String(m.id) === String(id));
+    if (msg) setDetail({ ...msg, id });
+  };
+
+  const deleteMsg = (id) => {
+    setMsgs((prev) => prev.filter((m) => String(m.id) !== String(id)));
+    if (detail?.id === id) setDetail(null);
+    onToast?.("Pesan dihapus", "info");
+  };
+
+  useEffect(() => {
+    const s = localStorage.getItem("alltool-mail-v9");
+    if (s) {
+      try {
+        const mb = JSON.parse(s);
+        if (mb.ts && Date.now() - mb.ts > 3500000) create();
+        else { setMailbox(mb); inbox(mb); }
+      } catch { create(); }
+    } else create();
+  }, [create, inbox]);
+
+  useEffect(() => {
+    if (!mailbox || !autoRefresh) return;
+    const i = setInterval(() => inbox(mailbox, true), 15000);
+    return () => clearInterval(i);
+  }, [mailbox, inbox, autoRefresh]);
+
+  const fmtTime = (s) => {
+    try { return new Date(s).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }); }
+    catch { return ""; }
+  };
+
+  return (
+    <div className="col">
+      <div className="card">
+        <div className="tag" style={{ marginBottom: 10 }}>ALAMAT EMAIL SEMENTARA</div>
+        {err && <div style={{ marginBottom: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{err}</div>}
+        <div className="row">
+          <div className="inp" style={{ flex: 1, minWidth: 200, fontFamily: "monospace", fontSize: 12, wordBreak: "break-all", background: "var(--ps)", borderColor: "var(--border-strong)" }}>
+            {loading && !mailbox ? "Memuat..." : mailbox?.email || "(kosong)"}
+          </div>
+          <button className="btn btn-s" onClick={() => { copy(mailbox?.email || ""); onToast?.("Email tersalin", "success"); }} disabled={!mailbox}><I.Copy size={14} />Salin</button>
+          <button className="btn btn-p" disabled={loading || cooldown > 0} onClick={create}>
+            {loading ? <I.Loader2 size={14} className="spin" /> : cooldown > 0 ? <>{cooldown}s</> : <I.RefreshCw size={14} />}
+            {cooldown > 0 ? "" : "Baru"}
+          </button>
+        </div>
+        {mailbox && (
+          <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }}>
+            <div className="soft">Auto 15s {lastRefresh && `• ${lastRefresh.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}</div>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, color: "var(--text-muted)" }}>
+              <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />Auto
+            </label>
+          </div>
+        )}
+      </div>
+      {detail ? (
+        <div className="card fade">
+          <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+            <button className="btn btn-g" onClick={() => setDetail(null)}><I.ArrowLeft size={16} />Kembali</button>
+            <button className="btn btn-g" onClick={() => deleteMsg(detail.id)} style={{ color: "var(--red)" }}><I.Trash2 size={16} />Hapus</button>
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.4 }}>{detail.subject || "(Tanpa subjek)"}</div>
+          <div className="mut" style={{ marginTop: 6 }}><b>Dari:</b> {detail.from?.address}</div>
+          {detail.createdAt && <div className="soft" style={{ marginTop: 3 }}>{fmtTime(detail.createdAt)}</div>}
+          {detail.html && detail.html.length > 0 && detail.html[0] ? (
+            <div style={{ marginTop: 16, padding: 16, border: "1.5px solid var(--border)", borderRadius: 12, fontSize: 13, lineHeight: 1.7, background: "#fff", color: "#0f172a", overflowX: "auto" }} dangerouslySetInnerHTML={{ __html: detail.html[0] }} />
+          ) : (
+            <div style={{ marginTop: 16, padding: 16, border: "1.5px solid var(--border)", borderRadius: 12, fontSize: 13, whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.7 }}>{detail.text || "(Tidak ada isi pesan)"}</div>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <div className="row" style={{ gap: 8 }}>
+              <b style={{ fontSize: 16 }}>Kotak Masuk {msgs.length > 0 && `(${msgs.length})`}</b>
+              {newCount > 0 && <span className="pill" style={{ background: "var(--green)", color: "#fff" }}>+{newCount} baru</span>}
+            </div>
+            <button className="btn btn-s" disabled={refreshing} onClick={() => { setNewCount(0); inbox(mailbox); }}>
+              {refreshing ? <I.Loader2 size={14} className="spin" /> : <I.RefreshCw size={14} />}Refresh
+            </button>
+          </div>
+          {msgs.length === 0 && !refreshing && (
+            <div className="card" style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>
+              <I.Mail size={44} style={{ margin: "0 auto 12px", opacity: 0.35 }} />
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Belum ada email masuk</div>
+              <div className="soft" style={{ marginTop: 6 }}>Kirim email ke alamat di atas</div>
+            </div>
+          )}
+          {msgs.map((m) => (
+            <div key={m.id} className="card card-int" style={{ position: "relative" }}>
+              <button onClick={() => open(m.id)} style={{ textAlign: "left", width: "100%", background: "none", border: "none", padding: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: 24 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.subject}</div>
+                    <div className="mut" style={{ marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.from?.address}</div>
+                  </div>
+                  <div className="soft" style={{ flexShrink: 0, textAlign: "right" }}>{fmtTime(m.createdAt)}</div>
+                </div>
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); deleteMsg(m.id); }} className="btn btn-g" style={{ position: "absolute", top: 8, right: 8, padding: 6, color: "var(--red)" }}><I.X size={14} /></button>
+            </div>
+          ))}
+        </>
       )}
     </div>
   );
@@ -1200,10 +1288,10 @@ export function KomikReader({ onToast }) {
   const loadPopular = async () => {
     setLoading(true); setErr("");
     try {
-      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-popular", page: 1 }) });
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-popular" }) });
       const d = await r.json();
       if (d.error) setErr(d.error);
-      else setMangaList(d.manga_list || d.data || d || []);
+      else setMangaList(d.list || []);
     } catch { setErr("Gagal load manga."); }
     setLoading(false);
   };
@@ -1215,15 +1303,15 @@ export function KomikReader({ onToast }) {
       const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-search", q: search }) });
       const d = await r.json();
       if (d.error) setErr(d.error);
-      else setMangaList(d.manga_list || d.data || d || []);
+      else setMangaList(d.list || []);
     } catch { setErr("Gagal search."); }
     setLoading(false);
   };
 
-  const openDetail = async (endpoint) => {
+  const openDetail = async (id) => {
     setLoading(true); setErr(""); setMode("detail");
     try {
-      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-detail", endpoint }) });
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-detail", id }) });
       const d = await r.json();
       if (d.error) setErr(d.error);
       else setDetail(d);
@@ -1231,10 +1319,10 @@ export function KomikReader({ onToast }) {
     setLoading(false);
   };
 
-  const openChapter = async (chapterEndpoint) => {
+  const openChapter = async (id) => {
     setLoading(true); setErr(""); setMode("reader");
     try {
-      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-chapter", chapterEndpoint }) });
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-chapter", id }) });
       const d = await r.json();
       if (d.error) setErr(d.error);
       else setChapter(d);
@@ -1244,68 +1332,66 @@ export function KomikReader({ onToast }) {
 
   useEffect(() => { loadPopular(); }, []);
 
-  // Reader mode
   if (mode === "reader" && chapter) {
-    const images = chapter.image_path || chapter.images || [];
     return (
       <div className="col">
         <div className="card" style={{ position: "sticky", top: 70, zIndex: 10 }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
             <button className="btn btn-g" onClick={() => { setMode("detail"); setChapter(null); }}><I.ArrowLeft size={16} />Kembali</button>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>{chapter.chapter_endpoint || chapter.title || "Chapter"}</div>
+            <div className="soft">{chapter.pages} halaman</div>
           </div>
         </div>
         {loading && <div className="card" style={{ textAlign: "center", padding: 40 }}><I.Loader2 size={32} className="spin" style={{ color: "var(--p)" }} /></div>}
         <div className="manga-pages">
-          {images.map((img, i) => {
-            const src = img.startsWith("http") ? img : `https://mangamint.kaedenoki.net${img.startsWith("/") ? img : "/" + img}`;
-            return <img key={i} src={src} alt={`page-${i + 1}`} loading="lazy" style={{ width: "100%", maxWidth: 800, display: "block", margin: "0 auto" }} />;
-          })}
+          {chapter.images?.map((img, i) => (
+            <img key={i} src={img} alt={`page-${i + 1}`} loading="lazy" style={{ width: "100%", maxWidth: 800, display: "block", margin: "0 auto" }} />
+          ))}
         </div>
       </div>
     );
   }
 
-  // Detail mode
   if (mode === "detail" && detail) {
-    const info = detail.manga_detail || detail;
-    const chapters = detail.chapter_list || info.chapter_list || [];
+    const info = detail.info;
+    const chapters = detail.chapters || [];
     return (
       <div className="col">
-        <button className="btn btn-g" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("home"); setDetail(null); }}>
-          <I.ArrowLeft size={16} />Kembali
-        </button>
+        <button className="btn btn-g" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("home"); setDetail(null); }}><I.ArrowLeft size={16} />Kembali</button>
         <div className="card">
           <div className="row" style={{ gap: 16, alignItems: "flex-start" }}>
-            <img src={info.thumb || info.thumbnail} style={{ width: 120, borderRadius: 12, flexShrink: 0 }} alt={info.title} />
+            <img src={info.thumb} style={{ width: 120, borderRadius: 12, flexShrink: 0 }} alt={info.title} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>{info.title}</h2>
-              <div className="mut" style={{ fontSize: 12, marginBottom: 8 }}>{info.type || "Manga"} • {info.status || "-"}</div>
+              <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6, lineHeight: 1.3 }}>{info.title}</h2>
+              {info.altTitle && <div className="mut" style={{ fontSize: 11, marginBottom: 6 }}>{info.altTitle}</div>}
               <div className="row">
-                {(info.genre_list || []).slice(0, 6).map((g, i) => (
-                  <span key={i} className="pill" style={{ fontSize: 10 }}>{g.genre_name || g}</span>
+                <span className="pill" style={{ fontSize: 10 }}>{info.status}</span>
+                {info.year && <span className="pill" style={{ fontSize: 10 }}>{info.year}</span>}
+              </div>
+              <div className="row" style={{ marginTop: 8 }}>
+                {(info.tags || []).slice(0, 4).map((g, i) => (
+                  <span key={i} style={{ fontSize: 10, padding: "2px 8px", background: "var(--ps)", borderRadius: 12, color: "var(--p)" }}>{g}</span>
                 ))}
               </div>
             </div>
           </div>
-          <div className="mut" style={{ marginTop: 14, fontSize: 12, lineHeight: 1.7 }}>{info.synopsis || info.description || "Tidak ada sinopsis."}</div>
+          <div className="mut" style={{ marginTop: 14, fontSize: 12, lineHeight: 1.7 }}>{info.desc}</div>
         </div>
         <div className="card">
           <div className="tag" style={{ marginBottom: 10 }}>{chapters.length} CHAPTER</div>
           <div style={{ maxHeight: 400, overflowY: "auto" }}>
             {chapters.map((c, i) => (
-              <button key={i} onClick={() => openChapter(c.chapter_endpoint)} className="row" style={{ width: "100%", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid var(--border)", textAlign: "left", background: "transparent" }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{c.chapter_title || `Chapter ${i + 1}`}</span>
-                <span className="soft">{c.chapter_date || ""}</span>
+              <button key={c.id} onClick={() => openChapter(c.id)} style={{ width: "100%", display: "flex", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid var(--border)", textAlign: "left", background: "transparent", gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Ch. {c.chapter} {c.title ? `- ${c.title}` : ""}</span>
+                <span className="soft" style={{ fontSize: 10 }}>{c.lang?.toUpperCase()} • {c.pages}p</span>
               </button>
             ))}
+            {chapters.length === 0 && <div className="mut" style={{ textAlign: "center", padding: 20 }}>Belum ada chapter tersedia</div>}
           </div>
         </div>
       </div>
     );
   }
 
-  // Home mode
   return (
     <div className="col">
       <div className="card">
@@ -1319,89 +1405,69 @@ export function KomikReader({ onToast }) {
       {err && <div className="card" style={{ color: "var(--red)", textAlign: "center" }}>{err}</div>}
       {loading && mangaList.length === 0 && <div className="card" style={{ textAlign: "center", padding: 40 }}><I.Loader2 size={32} className="spin" style={{ color: "var(--p)", margin: "0 auto" }} /></div>}
       <div className="manga-grid">
-        {mangaList.map((m, i) => (
-          <div key={i} className="manga-card" onClick={() => openDetail(m.endpoint || m.manga_endpoint || m.slug)}>
-            <img src={m.thumb || m.thumbnail || m.image} alt={m.title} loading="lazy" />
+        {mangaList.map((m) => (
+          <div key={m.id} className="manga-card" onClick={() => openDetail(m.id)}>
+            {m.thumb && <img src={m.thumb} alt={m.title} loading="lazy" />}
             <div className="manga-info">{m.title}</div>
           </div>
         ))}
       </div>
-      {mangaList.length === 0 && !loading && <div className="card" style={{ textAlign: "center", padding: 40 }}><I.BookOpen size={40} style={{ opacity: 0.3, margin: "0 auto 10px" }} /><div className="mut">Tidak ada manga ditemukan</div></div>}
+      {mangaList.length === 0 && !loading && (
+        <div className="card" style={{ textAlign: "center", padding: 40 }}>
+          <I.BookOpen size={40} style={{ opacity: 0.3, margin: "0 auto 10px" }} />
+          <div className="mut">Tidak ada manga ditemukan</div>
+        </div>
+      )}
     </div>
   );
 }
 
-/* ============ AI CHAT (OpenRouter Multi-Model) ============ */
+/* ============ AI CHAT (Multi-Provider) ============ */
 export function AIChat({ onToast }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [showSettings, setShowSettings] = useState(false);
-  const [keys, setKeys] = useState([]);
-  const [newKey, setNewKey] = useState("");
-  const [activeKeyIdx, setActiveKeyIdx] = useState(0);
+  const [keys, setKeys] = useState({});
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Load dari localStorage
   useEffect(() => {
     setModel(getStoredModel());
-    const k = getStoredKeys();
-    setKeys(k);
-    setActiveKeyIdx(k.length > 0 ? 0 : -1);
+    setKeys(getStoredKeys());
     setHistory(getStoredHistory());
   }, []);
 
-  // Scroll ke bawah saat pesan baru
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  const saveKeys = (newKeys) => {
-    setKeys(newKeys);
-    saveStoredKeys(newKeys);
-  };
-
-  const addKey = () => {
-    const k = newKey.trim();
-    if (!k) return;
-    if (!k.startsWith("sk-or-") && !k.startsWith("sk-")) {
-      onToast?.("API key harus diawali 'sk-or-' (OpenRouter) atau 'sk-'", "error");
-      return;
-    }
-    if (keys.includes(k)) {
-      onToast?.("API key sudah ada", "error");
-      return;
-    }
-    const newKeys = [...keys, k];
-    saveKeys(newKeys);
-    setNewKey("");
-    onToast?.("API key ditambahkan", "success");
-  };
-
-  const removeKey = (idx) => {
-    const newKeys = keys.filter((_, i) => i !== idx);
-    saveKeys(newKeys);
-    if (activeKeyIdx >= newKeys.length) setActiveKeyIdx(newKeys.length - 1);
-    onToast?.("API key dihapus", "info");
-  };
+  const activeModel = AI_MODELS.find((m) => m.id === model) || AI_MODELS[0];
+  const activeProvider = PROVIDERS[activeModel.provider];
 
   const changeModel = (m) => {
-    setModel(m);
-    setStoredModel(m);
+    setModel(m); setStoredModel(m);
     onToast?.(`Model: ${AI_MODELS.find((x) => x.id === m)?.name}`, "success");
   };
 
-  const clearChat = () => {
-    setMessages([]);
-    onToast?.("Chat dibersihkan", "info");
+  const updateKey = (provider, value) => {
+    const newKeys = { ...keys, [provider]: value };
+    setKeys(newKeys); saveStoredKeys(newKeys);
   };
+
+  const clearChat = () => { setMessages([]); onToast?.("Chat dibersihkan", "info"); };
 
   const sendMessage = async () => {
     const text = input.trim();
     if (!text || loading) return;
+    const apiKey = keys[activeModel.provider] || "";
+    if (!apiKey) {
+      onToast?.(`API key ${activeProvider.name} belum diatur. Buka Pengaturan.`, "error");
+      setShowSettings(true);
+      return;
+    }
 
     const userMsg = { role: "user", content: text };
     const newMsgs = [...messages, userMsg];
@@ -1409,37 +1475,15 @@ export function AIChat({ onToast }) {
     setInput("");
     setLoading(true);
 
-    // Cek apakah butuh API key
-    const selectedModel = AI_MODELS.find((m) => m.id === model);
-    let apiKey = null;
-    if (!selectedModel?.free) {
-      if (keys.length === 0) {
-        onToast?.("Model premium butuh API key. Tambah di Pengaturan.", "error");
-        setLoading(false);
-        return;
-      }
-      apiKey = keys[activeKeyIdx >= 0 ? activeKeyIdx : 0];
-    } else if (keys.length > 0) {
-      apiKey = keys[activeKeyIdx >= 0 ? activeKeyIdx : 0];
-    }
-
-    // Bangun konteks
-    const systemMsg = { role: "system", content: SYSTEM_PROMPT };
     const contextMsgs = [
-      systemMsg,
-      ...newMsgs.slice(-10), // Kirim 10 pesan terakhir untuk konteks
+      { role: "system", content: SYSTEM_PROMPT },
+      ...newMsgs.slice(-10),
     ];
 
     try {
       const r = await fetch("/api", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "ai-chat",
-          messages: contextMsgs,
-          model,
-          apiKey,
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ai-chat", messages: contextMsgs, model, provider: activeModel.provider, apiKey }),
       });
       const d = await r.json();
       if (d.error) {
@@ -1447,15 +1491,10 @@ export function AIChat({ onToast }) {
         setMessages([...newMsgs, { role: "assistant", content: `Error: ${d.error}`, error: true }]);
       } else {
         const aiMsg = { role: "assistant", content: d.content };
-        const finalMsgs = [...newMsgs, aiMsg];
-        setMessages(finalMsgs);
-        // Simpan history
-        const newHistory = [
-          ...history,
-          { model, user: text.slice(0, 100), ai: d.content.slice(0, 200), ts: Date.now() },
-        ];
-        setHistory(newHistory.slice(-50));
-        saveStoredHistory(newHistory.slice(-50));
+        setMessages([...newMsgs, aiMsg]);
+        const newHistory = [...history, { model, user: text.slice(0, 100), ai: d.content.slice(0, 200), ts: Date.now() }];
+        setHistory(newHistory.slice(-30));
+        saveStoredHistory(newHistory.slice(-30));
       }
     } catch (e) {
       onToast?.("Gagal kirim pesan", "error");
@@ -1464,167 +1503,113 @@ export function AIChat({ onToast }) {
     setLoading(false);
   };
 
-  const activeModel = AI_MODELS.find((m) => m.id === model);
+  const groupedModels = AI_MODELS.reduce((acc, m) => {
+    if (!acc[m.provider]) acc[m.provider] = [];
+    acc[m.provider].push(m);
+    return acc;
+  }, {});
 
   return (
     <div className="col">
-      {/* TOOLBAR */}
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <div className="row" style={{ gap: 8 }}>
-            <div className="ic" style={{ width: 36, height: 36 }}>
-              <I.Bot size={18} />
+          <div className="row" style={{ gap: 10 }}>
+            <div className="ic" style={{ width: 40, height: 40, background: "linear-gradient(135deg, var(--p), var(--ph))", color: "#fff", border: "none" }}>
+              <I.Bot size={20} />
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>{activeModel?.name || "AI"}</div>
-              <div className="soft">{activeModel?.provider} • {activeModel?.free ? "Gratis" : "Premium"}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700 }}>{activeModel.name}</div>
+              <div className="soft">{activeProvider.name} {keys[activeModel.provider] ? "• Key aktif" : "• Belum ada key"}</div>
             </div>
           </div>
           <div className="row">
-            <button className="btn btn-g" onClick={() => setShowHistory(!showHistory)} title="Riwayat"><I.Clock size={16} /></button>
-            <button className="btn btn-g" onClick={clearChat} title="Hapus chat"><I.Trash2 size={16} /></button>
-            <button className="btn btn-g" onClick={() => setShowSettings(!showSettings)} title="Pengaturan"><I.Settings size={16} /></button>
+            <button className="btn btn-g" onClick={() => setShowHistory(!showHistory)}><I.Clock size={16} /></button>
+            <button className="btn btn-g" onClick={clearChat}><I.Trash2 size={16} /></button>
+            <button className="btn btn-g" onClick={() => setShowSettings(!showSettings)} style={{ color: !keys[activeModel.provider] ? "var(--red)" : "inherit" }}><I.Settings size={16} /></button>
           </div>
         </div>
       </div>
 
-      {/* SETTINGS PANEL */}
       {showSettings && (
         <div className="card fade">
-          <div className="tag" style={{ marginBottom: 12 }}>PILIH MODEL AI</div>
-          <div style={{ maxHeight: 300, overflowY: "auto" }} className="col">
-            {AI_MODELS.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => changeModel(m.id)}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  padding: 12, borderRadius: 10, border: `1.5px solid ${model === m.id ? "var(--p)" : "var(--border)"}`,
-                  background: model === m.id ? "var(--ps)" : "transparent",
-                  textAlign: "left", gap: 10,
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>{m.name}</span>
-                    {m.free ? (
-                      <span className="pill" style={{ fontSize: 9, padding: "2px 6px", background: "rgba(34,197,94,0.15)", color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}>GRATIS</span>
-                    ) : (
-                      <span className="pill" style={{ fontSize: 9, padding: "2px 6px", background: "rgba(234,179,8,0.15)", color: "var(--yellow)", borderColor: "rgba(234,179,8,0.3)" }}>KEY</span>
-                    )}
-                  </div>
-                  <div className="soft" style={{ marginTop: 4 }}>{m.provider} • {m.context.toLocaleString()} tokens</div>
+          <div className="tag" style={{ marginBottom: 12 }}>API KEY PROVIDER</div>
+          <p className="mut" style={{ fontSize: 12, marginBottom: 14, lineHeight: 1.6 }}>Semua provider di bawah ini <b>GRATIS</b>. Daftar di web resmi untuk dapat API key.</p>
+          {Object.values(PROVIDERS).map((p) => (
+            <div key={p.id} style={{ marginBottom: 16, padding: 14, border: "1.5px solid var(--border)", borderRadius: 12 }}>
+              <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{p.name} {keys[p.id] && <span style={{ color: "var(--green)", fontSize: 11 }}>✓</span>}</div>
+                  <div className="soft" style={{ marginTop: 2 }}>{p.desc}</div>
                 </div>
-                {model === m.id && <I.Check size={16} style={{ color: "var(--p)" }} />}
-              </button>
+                <a href={p.keyUrl} target="_blank" rel="noopener" className="btn btn-s" style={{ fontSize: 11, padding: "6px 10px" }}><I.ExternalLink size={12} />Daftar</a>
+              </div>
+              <div className="row">
+                <input className="inp" type="password" style={{ flex: 1, fontFamily: "monospace", fontSize: 12 }} value={keys[p.id] || ""} onChange={(e) => updateKey(p.id, e.target.value)} placeholder={p.keyPlaceholder} />
+                {keys[p.id] && <button className="btn btn-g" onClick={() => updateKey(p.id, "")} style={{ color: "var(--red)" }}><I.Trash2 size={14} /></button>}
+              </div>
+            </div>
+          ))}
+
+          <div className="tag" style={{ marginTop: 20, marginBottom: 12 }}>PILIH MODEL</div>
+          {Object.entries(groupedModels).map(([provider, models]) => (
+            <div key={provider} style={{ marginBottom: 14 }}>
+              <div className="soft" style={{ marginBottom: 8, fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase" }}>{PROVIDERS[provider]?.name}</div>
+              <div className="col">
+                {models.map((m) => (
+                  <button key={m.id} onClick={() => changeModel(m.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 10, borderRadius: 10, border: `1.5px solid ${model === m.id ? "var(--p)" : "var(--border)"}`, background: model === m.id ? "var(--ps)" : "transparent", textAlign: "left", gap: 10 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>{m.name}</div>
+                      <div className="soft" style={{ marginTop: 3 }}>{m.desc}</div>
+                    </div>
+                    {model === m.id && <I.Check size={16} style={{ color: "var(--p)" }} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showHistory && history.length > 0 && (
+        <div className="card fade">
+          <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+            <div className="tag">RIWAYAT ({history.length})</div>
+            <button className="btn btn-g" onClick={() => { setHistory([]); saveStoredHistory([]); onToast?.("Riwayat dihapus", "info"); }} style={{ color: "var(--red)", fontSize: 11 }}><I.Trash2 size={12} />Hapus</button>
+          </div>
+          <div className="col" style={{ maxHeight: 300, overflowY: "auto" }}>
+            {[...history].reverse().map((h, i) => (
+              <div key={i} style={{ padding: 10, border: "1px solid var(--border)", borderRadius: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.user}</div>
+                <div className="soft" style={{ marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.ai}</div>
+              </div>
             ))}
           </div>
-
-          <div className="tag" style={{ marginTop: 20, marginBottom: 12 }}>API KEY (Opsional)</div>
-          <p className="mut" style={{ fontSize: 12, marginBottom: 12, lineHeight: 1.6 }}>
-            Model gratis tidak butuh API key. Untuk model premium atau akses tanpa batas, tambahkan API key dari{" "}
-            <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" style={{ color: "var(--p)", fontWeight: 600 }}>openrouter.ai/keys</a>.
-          </p>
-
-          {keys.length > 0 && (
-            <div className="col" style={{ marginBottom: 12 }}>
-              {keys.map((k, i) => (
-                <div key={i} style={{
-                  display: "flex", alignItems: "center", gap: 8, padding: 10,
-                  background: activeKeyIdx === i ? "var(--ps)" : "transparent",
-                  border: `1.5px solid ${activeKeyIdx === i ? "var(--p)" : "var(--border)"}`,
-                  borderRadius: 10, cursor: "pointer",
-                }} onClick={() => setActiveKeyIdx(i)}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: "monospace", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {k.slice(0, 20)}...{k.slice(-6)}
-                    </div>
-                    <div className="soft" style={{ marginTop: 2 }}>{activeKeyIdx === i ? "Aktif" : "Klik untuk aktifkan"}</div>
-                  </div>
-                  <button className="btn btn-g" onClick={(e) => { e.stopPropagation(); removeKey(i); }} style={{ color: "var(--red)", padding: 6 }}>
-                    <I.Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="row">
-            <input
-              className="inp"
-              type="password"
-              style={{ flex: 1, fontFamily: "monospace", fontSize: 12 }}
-              value={newKey}
-              onChange={(e) => setNewKey(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addKey()}
-              placeholder="sk-or-v1-..."
-            />
-            <button className="btn btn-p" onClick={addKey} disabled={!newKey.trim()}><I.Plus size={14} />Tambah</button>
-          </div>
-
-          {history.length > 0 && (
-            <>
-              <div className="tag" style={{ marginTop: 20, marginBottom: 12 }}>RIWAYAT ({history.length})</div>
-              <button className="btn btn-danger" onClick={() => { setHistory([]); saveStoredHistory([]); onToast?.("Riwayat dihapus", "info"); }} style={{ width: "100%" }}>
-                <I.Trash2 size={14} />Hapus semua riwayat
-              </button>
-            </>
-          )}
         </div>
       )}
 
-      {/* HISTORY PANEL */}
-      {showHistory && (
-        <div className="card fade">
-          <div className="tag" style={{ marginBottom: 12 }}>RIWAYAT CHAT</div>
-          {history.length === 0 ? (
-            <div className="mut" style={{ textAlign: "center", padding: 20 }}>Belum ada riwayat</div>
-          ) : (
-            <div className="col">
-              {[...history].reverse().slice(0, 20).map((h, i) => (
-                <div key={i} style={{ padding: 12, border: "1px solid var(--border)", borderRadius: 10 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.user}</div>
-                  <div className="soft" style={{ marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.ai}</div>
-                  <div className="soft" style={{ marginTop: 4, fontSize: 10 }}>{new Date(h.ts).toLocaleString("id-ID")}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* CHAT AREA */}
       <div className="chat-container">
         <div className="chat-messages">
           {messages.length === 0 && (
             <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-muted)" }}>
-              <I.Sparkles size={48} style={{ color: "var(--p)", margin: "0 auto 16px", opacity: 0.6 }} />
+              <div className="ic" style={{ width: 60, height: 60, background: "linear-gradient(135deg, var(--p), var(--ph))", color: "#fff", border: "none", margin: "0 auto 16px" }}><I.Sparkles size={28} /></div>
               <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Halo! Saya AllTool Assistant</div>
-              <div className="mut" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6 }}>
-                Tanya apa saja tentang AllTool — cara pakai tool, fitur, atau bantuan teknis.
-              </div>
+              <div className="mut" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6 }}>Tanya apa saja tentang AllTool.</div>
+              {!keys[activeModel.provider] && (
+                <div style={{ marginTop: 16, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, border: "1px solid rgba(239,68,68,0.3)", color: "var(--red)", fontSize: 12, maxWidth: 400, margin: "16px auto 0" }}>
+                  <b>Setup dulu:</b> Klik ikon Settings di atas untuk input API key {activeProvider.name} (gratis).
+                </div>
+              )}
               <div className="row" style={{ marginTop: 20, justifyContent: "center" }}>
-                {[
-                  "Apa saja fitur AllTool?",
-                  "Cara download TikTok tanpa watermark?",
-                  "Bagaimana pakai Virus Scanner?",
-                  "Apa itu Temp Mail?",
-                ].map((q) => (
-                  <button key={q} className="chip" onClick={() => { setInput(q); }} style={{ fontSize: 11 }}>
-                    {q}
-                  </button>
+                {["Apa saja fitur AllTool?", "Cara download TikTok?", "Bagaimana pakai Virus Scanner?", "Apa itu Temp Mail?"].map((q) => (
+                  <button key={q} className="chip" onClick={() => setInput(q)} style={{ fontSize: 11 }}>{q}</button>
                 ))}
               </div>
             </div>
           )}
           {messages.map((m, i) => (
             <div key={i} className={`chat-msg ${m.role === "user" ? "user" : "ai"}`}>
-              <div className="chat-avatar">
-                {m.role === "user" ? <I.User size={16} /> : <I.Bot size={16} />}
-              </div>
-              <div className="chat-bubble" style={m.error ? { borderLeft: "3px solid var(--red)" } : {}}>
-                {m.content}
-              </div>
+              <div className="chat-avatar">{m.role === "user" ? <I.User size={16} /> : <I.Bot size={16} />}</div>
+              <div className="chat-bubble" style={m.error ? { borderLeft: "3px solid var(--red)" } : {}}>{m.content}</div>
             </div>
           ))}
           {loading && (
@@ -1640,61 +1625,12 @@ export function AIChat({ onToast }) {
           <div ref={messagesEndRef} />
         </div>
         <div className="chat-input-area">
-          <textarea
-            className="txa"
-            rows={1}
-            style={{ minHeight: 44, maxHeight: 120, resize: "none" }}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            placeholder="Ketik pesan... (Enter kirim, Shift+Enter baris baru)"
-          />
+          <textarea className="txa" rows={1} style={{ minHeight: 44, maxHeight: 120, resize: "none" }} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} placeholder="Ketik pesan... (Enter kirim)" />
           <button className="btn btn-p" onClick={sendMessage} disabled={loading || !input.trim()} style={{ minWidth: 44, padding: "10px 14px" }}>
             {loading ? <I.Loader2 size={16} className="spin" /> : <I.Send size={16} />}
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-/* ============ IP LOOKUP ============ */
-export function IpLookup({ onToast }) {
-  const [ip, setIp] = useState("");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [e, setE] = useState("");
-  const go = async (target = "") => {
-    setLoading(true); setE(""); setData(null);
-    try {
-      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "ip-lookup", ip: target }) });
-      const d = await r.json();
-      if (d.error) { setE(d.reason || "Tidak ditemukan"); onToast?.("IP tidak ditemukan", "error"); }
-      else { setData(d); onToast?.("Info IP diambil", "success"); }
-    } catch { setE("Gagal"); }
-    setLoading(false);
-  };
-  useEffect(() => { go(); }, []);
-  const rows = [["IP", "ip"], ["Kota", "city"], ["Region", "region"], ["Negara", "country_name"], ["Kode Negara", "country_code"], ["Kode Pos", "postal"], ["Latitude", "latitude"], ["Longitude", "longitude"], ["Zona Waktu", "timezone"], ["ISP", "org"], ["ASN", "asn"]];
-  return (
-    <div className="col">
-      <div className="card">
-        <div className="row">
-          <input className="inp" style={{ flex: 1, minWidth: 200, fontFamily: "monospace" }} value={ip} onChange={(e) => setIp(e.target.value)} placeholder="Kosongkan untuk IP Anda..." />
-          <button className="btn btn-p" disabled={loading} onClick={() => go(ip)}>
-            {loading ? <I.Loader2 size={14} className="spin" /> : <I.Globe size={14} />}Cek IP
-          </button>
-        </div>
-        {e && <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{e}</div>}
-      </div>
-      {data && <div className="card">
-        {rows.map(([l, k]) => (
-          <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
-            <span className="mut">{l}</span>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{String(data[k] ?? "-")}</span>
-          </div>
-        ))}
-      </div>}
     </div>
   );
 }
@@ -1713,42 +1649,16 @@ export function ApkCompiler({ onToast }) {
   const valid = url.startsWith("http") && name.length >= 2;
   const validHtml = htmlCode.length > 20 && name.length >= 2;
 
-  const openPwaBuilder = () => {
-    if (!valid) return;
-    copy(url);
-    onToast?.("URL dicopy. Lanjutkan di PWABuilder.", "success");
-    window.open(`https://www.pwabuilder.com/reportcard?site=${encodeURIComponent(url)}`, "_blank", "noopener");
-  };
-
-  const openAppsGeyser = () => {
-    if (!valid) return;
-    copy(url);
-    onToast?.("URL dicopy. Lanjutkan di AppsGeyser.", "success");
-    window.open("https://appsgeyser.com/create/", "_blank", "noopener");
-  };
-
-  const openWebIntoApp = () => {
-    if (!valid) return;
-    copy(url);
-    onToast?.("URL dicopy. Lanjutkan di WebIntoApp.", "success");
-    window.open(`https://www.webintoapp.com/store/start.php?url=${encodeURIComponent(url)}`, "_blank", "noopener");
-  };
+  const openPwaBuilder = () => { if (!valid) return; copy(url); onToast?.("URL dicopy", "success"); window.open(`https://www.pwabuilder.com/reportcard?site=${encodeURIComponent(url)}`, "_blank", "noopener"); };
+  const openAppsGeyser = () => { if (!valid) return; copy(url); onToast?.("URL dicopy", "success"); window.open("https://appsgeyser.com/create/", "_blank", "noopener"); };
+  const openWebIntoApp = () => { if (!valid) return; copy(url); onToast?.("URL dicopy", "success"); window.open(`https://www.webintoapp.com/store/start.php?url=${encodeURIComponent(url)}`, "_blank", "noopener"); };
 
   const generateManifest = () => {
     if (!valid) return;
-    const manifest = {
-      name, short_name: name.slice(0, 12), start_url: url,
-      display: "standalone", background_color: "#0a0a14", theme_color: theme,
-      icons: [
-        { src: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=192&background=${theme.slice(1)}&color=fff`, sizes: "192x192", type: "image/png" },
-        { src: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=512&background=${theme.slice(1)}&color=fff`, sizes: "512x512", type: "image/png" },
-      ],
-    };
+    const manifest = { name, short_name: name.slice(0, 12), start_url: url, display: "standalone", background_color: "#0a0a14", theme_color: theme, icons: [{ src: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=192&background=${theme.slice(1)}&color=fff`, sizes: "192x192", type: "image/png" }, { src: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=512&background=${theme.slice(1)}&color=fff`, sizes: "512x512", type: "image/png" }] };
     const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" });
     const u = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = u; a.download = "manifest.json"; a.click();
-    URL.revokeObjectURL(u);
+    const a = document.createElement("a"); a.href = u; a.download = "manifest.json"; a.click(); URL.revokeObjectURL(u);
     onToast?.("manifest.json terunduh", "success");
   };
 
@@ -1756,12 +1666,12 @@ export function ApkCompiler({ onToast }) {
     if (!validHtml) return;
     const safe = name.replace(/[^a-zA-Z0-9]/g, "");
     const files = {
-      "README.md": `# ${name} - Android Project\n\nDibuat oleh AllTool APK Compiler.\n\n## Cara Build\n\n### Android Studio\n1. Buka folder di Android Studio\n2. Build, lalu Build APK\n\n### GitHub Actions\n1. Upload ke GitHub\n2. Workflow otomatis build APK\n3. Download dari tab Actions\n\nPackage: ${pkg}\nVersion: ${version}\n`,
+      "README.md": `# ${name}\n\nBuild via Android Studio atau GitHub Actions.\n\nPackage: ${pkg}\nVersion: ${version}\n`,
       "app/src/main/assets/index.html": htmlCode,
-      "app/src/main/AndroidManifest.xml": `<?xml version="1.0" encoding="utf-8"?>\n<manifest xmlns:android="http://schemas.android.com/apk/res/android"\n    package="${pkg}">\n    <uses-permission android:name="android.permission.INTERNET" />\n    <application android:label="${name}" android:usesCleartextTraffic="true"\n        android:theme="@android:style/Theme.NoTitleBar">\n        <activity android:name=".MainActivity" android:exported="true"\n            android:configChanges="orientation|screenSize|keyboardHidden">\n            <intent-filter>\n                <action android:name="android.intent.action.MAIN" />\n                <category android:name="android.intent.category.LAUNCHER" />\n            </intent-filter>\n        </activity>\n    </application>\n</manifest>`,
-      [`app/src/main/java/${pkg.replace(/\./g, "/")}/MainActivity.java`]: `package ${pkg};\n\nimport android.os.Bundle;\nimport android.webkit.WebView;\nimport android.webkit.WebViewClient;\nimport android.webkit.WebSettings;\nimport android.app.Activity;\n\npublic class MainActivity extends Activity {\n    private WebView webView;\n    @Override\n    protected void onCreate(Bundle savedInstanceState) {\n        super.onCreate(savedInstanceState);\n        webView = new WebView(this);\n        WebSettings s = webView.getSettings();\n        s.setJavaScriptEnabled(true);\n        s.setDomStorageEnabled(true);\n        s.setAllowFileAccess(true);\n        webView.setWebViewClient(new WebViewClient());\n        webView.loadUrl("file:///android_asset/index.html");\n        setContentView(webView);\n    }\n    @Override\n    public void onBackPressed() {\n        if (webView.canGoBack()) webView.goBack();\n        else super.onBackPressed();\n    }\n}`,
-      "app/build.gradle": `plugins { id 'com.android.application' }\n\nandroid {\n    namespace '${pkg}'\n    compileSdk 34\n    defaultConfig {\n        applicationId "${pkg}"\n        minSdk 21\n        targetSdk 34\n        versionCode 1\n        versionName "${version}"\n    }\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n}\n`,
-      "build.gradle": `buildscript {\n    repositories { google(); mavenCentral() }\n    dependencies { classpath 'com.android.tools.build:gradle:8.1.0' }\n}\nallprojects { repositories { google(); mavenCentral() } }`,
+      "app/src/main/AndroidManifest.xml": `<?xml version="1.0" encoding="utf-8"?>\n<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${pkg}">\n<uses-permission android:name="android.permission.INTERNET" />\n<application android:label="${name}" android:usesCleartextTraffic="true" android:theme="@android:style/Theme.NoTitleBar">\n<activity android:name=".MainActivity" android:exported="true">\n<intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>\n</activity></application></manifest>`,
+      [`app/src/main/java/${pkg.replace(/\./g, "/")}/MainActivity.java`]: `package ${pkg};\n\nimport android.os.Bundle;\nimport android.webkit.WebView;\nimport android.webkit.WebViewClient;\nimport android.webkit.WebSettings;\nimport android.app.Activity;\n\npublic class MainActivity extends Activity {\n  private WebView webView;\n  @Override protected void onCreate(Bundle s) {\n    super.onCreate(s);\n    webView = new WebView(this);\n    WebSettings ws = webView.getSettings();\n    ws.setJavaScriptEnabled(true);\n    ws.setDomStorageEnabled(true);\n    webView.setWebViewClient(new WebViewClient());\n    webView.loadUrl("file:///android_asset/index.html");\n    setContentView(webView);\n  }\n  @Override public void onBackPressed() { if (webView.canGoBack()) webView.goBack(); else super.onBackPressed(); }\n}`,
+      "app/build.gradle": `plugins { id 'com.android.application' }\nandroid { namespace '${pkg}'\ncompileSdk 34\ndefaultConfig { applicationId "${pkg}"; minSdk 21; targetSdk 34; versionCode 1; versionName "${version}" }\ncompileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }\n}`,
+      "build.gradle": `buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.1.0' } }\nallprojects { repositories { google(); mavenCentral() } }`,
       "settings.gradle": `include ':app'\nrootProject.name = "${safe}"`,
       "gradle.properties": `android.useAndroidX=true\norg.gradle.jvmargs=-Xmx2048m`,
       ".github/workflows/build.yml": `name: Build APK\non:\n  push:\n    branches: [ main ]\n  workflow_dispatch:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v3\n      - uses: actions/setup-java@v3\n        with:\n          distribution: 'temurin'\n          java-version: '17'\n      - uses: gradle/gradle-build-action@v2\n      - run: gradle assembleDebug\n      - uses: actions/upload-artifact@v3\n        with:\n          name: app-debug\n          path: app/build/outputs/apk/debug/app-debug.apk`,
@@ -1771,20 +1681,17 @@ export function ApkCompiler({ onToast }) {
       Object.entries(files).forEach(([path, content]) => zip.file(path, content));
       zip.generateAsync({ type: "blob" }).then((blob) => {
         const u = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = u; a.download = `${safe}_android_project.zip`; a.click();
-        URL.revokeObjectURL(u);
-        onToast?.("Project Android terunduh", "success");
+        const a = document.createElement("a"); a.href = u; a.download = `${safe}_android_project.zip`; a.click(); URL.revokeObjectURL(u);
+        onToast?.("Project terunduh", "success");
       });
-    }).catch(() => onToast?.("Gagal generate ZIP", "error"));
+    });
   };
 
   const handleFile = (f) => {
     const r = new FileReader();
     r.onload = () => {
       const text = String(r.result);
-      setHtmlCode(text);
-      setUploaded(f.name);
+      setHtmlCode(text); setUploaded(f.name);
       onToast?.(`File ${f.name} dimuat`, "success");
       const m = text.match(/<title>(.+?)<\/title>/i);
       if (m && !name) setName(m[1]);
@@ -1793,49 +1700,37 @@ export function ApkCompiler({ onToast }) {
   };
 
   const methods = [
-    { id: "pwabuilder", name: "PWABuilder", desc: "Microsoft. Untuk web app modern.", iconName: "Building2" },
-    { id: "appsgeyser", name: "AppsGeyser", desc: "Paling simpel, dapat APK dalam 2 menit.", iconName: "Zap" },
-    { id: "webintoapp", name: "WebIntoApp", desc: "Cepat, support HTML upload.", iconName: "Rocket" },
-    { id: "manual", name: "Build Manual (ZIP)", desc: "Download source, build via Android Studio.", iconName: "Terminal" },
+    { id: "pwabuilder", name: "PWABuilder", desc: "Microsoft. Kualitas terbaik.", iconName: "Building2" },
+    { id: "appsgeyser", name: "AppsGeyser", desc: "Paling simpel, cepat.", iconName: "Zap" },
+    { id: "webintoapp", name: "WebIntoApp", desc: "Support HTML upload.", iconName: "Rocket" },
+    { id: "manual", name: "Build Manual (ZIP)", desc: "Download source Android project.", iconName: "Terminal" },
   ];
-
-  const renderIcon = (iconName, size) => {
-    const C = I[iconName] || I.Wrench;
-    return <C size={size} />;
-  };
 
   return (
     <div className="col">
       <div className="card">
         <div className="tag" style={{ marginBottom: 12 }}>PILIH METODE</div>
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-          {methods.map((m) => (
-            <button key={m.id} onClick={() => setMethod(m.id)} className="card card-int" style={{ textAlign: "left", border: method === m.id ? "1.5px solid var(--p)" : "1px solid var(--border)" }}>
-              <div className="ic" style={{ marginBottom: 10 }}>{renderIcon(m.iconName, 20)}</div>
-              <div style={{ fontSize: 14, fontWeight: 700 }}>{m.name}</div>
-              <div className="mut" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5 }}>{m.desc}</div>
-            </button>
-          ))}
+          {methods.map((m) => {
+            const Icon = I[m.iconName] || I.Wrench;
+            return (
+              <button key={m.id} onClick={() => setMethod(m.id)} className="card card-int" style={{ textAlign: "left", border: method === m.id ? "1.5px solid var(--p)" : "1px solid var(--border)" }}>
+                <div className="ic" style={{ marginBottom: 10 }}><Icon size={20} /></div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{m.name}</div>
+                <div className="mut" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5 }}>{m.desc}</div>
+              </button>
+            );
+          })}
         </div>
       </div>
-
       {(method === "pwabuilder" || method === "appsgeyser" || method === "webintoapp") && (
         <div className="card">
           <div className="tag" style={{ marginBottom: 12 }}>KONFIGURASI</div>
           <div className="col">
-            <div>
-              <div className="tag" style={{ marginBottom: 6 }}>URL WEBSITE</div>
-              <input className="inp" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com" />
-            </div>
+            <div><div className="tag" style={{ marginBottom: 6 }}>URL WEBSITE</div><input className="inp" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com" /></div>
             <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-              <div>
-                <div className="tag" style={{ marginBottom: 6 }}>NAMA APLIKASI</div>
-                <input className="inp" value={name} onChange={(e) => setName(e.target.value)} placeholder="My App" />
-              </div>
-              <div>
-                <div className="tag" style={{ marginBottom: 6 }}>WARNA TEMA</div>
-                <input type="color" value={theme} onChange={(e) => setTheme(e.target.value)} style={{ width: "100%", height: 44, border: "none", borderRadius: 11, cursor: "pointer" }} />
-              </div>
+              <div><div className="tag" style={{ marginBottom: 6 }}>NAMA APLIKASI</div><input className="inp" value={name} onChange={(e) => setName(e.target.value)} placeholder="My App" /></div>
+              <div><div className="tag" style={{ marginBottom: 6 }}>WARNA TEMA</div><input type="color" value={theme} onChange={(e) => setTheme(e.target.value)} style={{ width: "100%", height: 44, border: "none", borderRadius: 11, cursor: "pointer" }} /></div>
             </div>
           </div>
           <div className="row" style={{ marginTop: 16 }}>
@@ -1846,28 +1741,23 @@ export function ApkCompiler({ onToast }) {
           </div>
         </div>
       )}
-
       {method === "manual" && (
         <>
           <div className="card">
             <div className="tag" style={{ marginBottom: 12 }}>UPLOAD ATAU PASTE HTML</div>
             <input type="file" className="inp" accept=".html,.htm,text/html" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-            {uploaded && <div className="mut" style={{ marginTop: 8 }}>File dimuat: {uploaded}</div>}
-            <div className="tag" style={{ marginTop: 14, marginBottom: 6 }}>ATAU PASTE KODE HTML</div>
-            <textarea className="txa" rows={10} value={htmlCode} onChange={(e) => setHtmlCode(e.target.value)} placeholder="<!DOCTYPE html>..." style={{ fontFamily: "monospace" }} />
+            {uploaded && <div className="mut" style={{ marginTop: 8 }}>File: {uploaded}</div>}
+            <textarea className="txa" style={{ marginTop: 12 }} rows={10} value={htmlCode} onChange={(e) => setHtmlCode(e.target.value)} placeholder="<!DOCTYPE html>..." />
           </div>
-
           <div className="card">
             <div className="tag" style={{ marginBottom: 12 }}>IDENTITAS APLIKASI</div>
             <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-              <div><div className="tag" style={{ marginBottom: 6 }}>NAMA</div><input className="inp" value={name} onChange={(e) => setName(e.target.value)} placeholder="Aplikasi Saya" /></div>
-              <div><div className="tag" style={{ marginBottom: 6 }}>PACKAGE NAME</div><input className="inp" value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="com.example.app" /></div>
-              <div><div className="tag" style={{ marginBottom: 6 }}>VERSION</div><input className="inp" value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.0.0" /></div>
+              <div><div className="tag" style={{ marginBottom: 6 }}>NAMA</div><input className="inp" value={name} onChange={(e) => setName(e.target.value)} /></div>
+              <div><div className="tag" style={{ marginBottom: 6 }}>PACKAGE NAME</div><input className="inp" value={pkg} onChange={(e) => setPkg(e.target.value)} /></div>
+              <div><div className="tag" style={{ marginBottom: 6 }}>VERSION</div><input className="inp" value={version} onChange={(e) => setVersion(e.target.value)} /></div>
               <div><div className="tag" style={{ marginBottom: 6 }}>WARNA TEMA</div><input type="color" value={theme} onChange={(e) => setTheme(e.target.value)} style={{ width: "100%", height: 44, border: "none", borderRadius: 11, cursor: "pointer" }} /></div>
             </div>
-            <button className="btn btn-p" style={{ marginTop: 16 }} disabled={!validHtml} onClick={downloadAndroidProject}>
-              <I.Download size={14} />Download Project Android (.zip)
-            </button>
+            <button className="btn btn-p" style={{ marginTop: 16 }} disabled={!validHtml} onClick={downloadAndroidProject}><I.Download size={14} />Download Project (.zip)</button>
           </div>
         </>
       )}
@@ -1882,20 +1772,12 @@ export function ColorPicker({ onToast }) {
   const r2h = (r, g, b) => {
     r /= 255; g /= 255; b /= 255;
     const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-    let h = 0, s = 0;
-    const l = (mx + mn) / 2;
-    if (mx !== mn) {
-      const d = mx - mn;
-      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
-      if (mx === r) h = (g - b) / d + (g < b ? 6 : 0);
-      else if (mx === g) h = (b - r) / d + 2;
-      else h = (r - g) / d + 4;
-      h /= 6;
-    }
+    let h = 0, s = 0; const l = (mx + mn) / 2;
+    if (mx !== mn) { const d = mx - mn; s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+      if (mx === r) h = (g - b) / d + (g < b ? 6 : 0); else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h /= 6; }
     return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
   };
-  const rgb = h2r(c);
-  const hsl = r2h(rgb.r, rgb.g, rgb.b);
+  const rgb = h2r(c); const hsl = r2h(rgb.r, rgb.g, rgb.b);
   const fmts = [["HEX", c.toUpperCase()], ["RGB", `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`], ["HSL", `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`]];
   const pal = ["#7c3aed", "#a78bfa", "#c4b5fd", "#ede9fe", "#0ea5e9", "#06b6d4", "#14b8a6", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#f43f5e", "#1e293b", "#334155", "#64748b", "#94a3b8"];
   return (
@@ -1933,26 +1815,12 @@ export function TextToSpeech() {
   const [pitch, setPitch] = useState(1);
   const [playing, setPlaying] = useState(false);
   useEffect(() => {
-    const up = () => {
-      const x = window.speechSynthesis.getVoices();
-      setVoices(x);
-      if (x.length && !v) setV(x[0].name);
-    };
+    const up = () => { const x = window.speechSynthesis.getVoices(); setVoices(x); if (x.length && !v) setV(x[0].name); };
     up();
     window.speechSynthesis.onvoiceschanged = up;
     return () => window.speechSynthesis.cancel();
   }, [v]);
-  const speak = () => {
-    if (!t) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(t);
-    const voice = voices.find((x) => x.name === v);
-    if (voice) u.voice = voice;
-    u.rate = rate; u.pitch = pitch;
-    u.onend = () => setPlaying(false);
-    u.onstart = () => setPlaying(true);
-    window.speechSynthesis.speak(u);
-  };
+  const speak = () => { if (!t) return; window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t); const voice = voices.find((x) => x.name === v); if (voice) u.voice = voice; u.rate = rate; u.pitch = pitch; u.onend = () => setPlaying(false); u.onstart = () => setPlaying(true); window.speechSynthesis.speak(u); };
   const stop = () => { window.speechSynthesis.cancel(); setPlaying(false); };
   return (
     <div className="col">
@@ -1973,4 +1841,44 @@ export function TextToSpeech() {
       </div>
     </div>
   );
-                }
+}
+
+/* ============ IP LOOKUP ============ */
+export function IpLookup({ onToast }) {
+  const [ip, setIp] = useState("");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [e, setE] = useState("");
+  const go = async (target = "") => {
+    setLoading(true); setE(""); setData(null);
+    try {
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "ip-lookup", ip: target }) });
+      const d = await r.json();
+      if (d.error) { setE(d.reason || "Tidak ditemukan"); onToast?.("IP tidak ditemukan", "error"); }
+      else { setData(d); onToast?.("Info IP diambil", "success"); }
+    } catch { setE("Gagal"); }
+    setLoading(false);
+  };
+  useEffect(() => { go(); }, []);
+  const rows = [["IP", "ip"], ["Kota", "city"], ["Region", "region"], ["Negara", "country_name"], ["Kode Negara", "country_code"], ["Kode Pos", "postal"], ["Latitude", "latitude"], ["Longitude", "longitude"], ["Zona Waktu", "timezone"], ["ISP", "org"], ["ASN", "asn"]];
+  return (
+    <div className="col">
+      <div className="card">
+        <div className="row">
+          <input className="inp" style={{ flex: 1, minWidth: 200, fontFamily: "monospace" }} value={ip} onChange={(e) => setIp(e.target.value)} placeholder="Kosongkan untuk IP Anda..." />
+          <button className="btn btn-p" disabled={loading} onClick={() => go(ip)}>
+            {loading ? <I.Loader2 size={14} className="spin" /> : <I.Globe size={14} />}Cek IP
+          </button>
+        </div>
+        {e && <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{e}</div>}
+      </div>
+      {data && <div className="card">
+        {rows.map(([l, k]) => (
+          <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
+            <span className="mut">{l}</span><span style={{ fontSize: 13, fontWeight: 600 }}>{String(data[k] ?? "-")}</span>
+          </div>
+        ))}
+      </div>}
+    </div>
+  );
+            }
