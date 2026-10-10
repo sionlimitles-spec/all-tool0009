@@ -37,12 +37,7 @@ async function tiktokDownload(url) {
           hd: v.hdplay || v.play,
           music: v.music,
           duration: v.duration || 0,
-          stats: {
-            plays: v.play_count || 0,
-            likes: v.digg_count || 0,
-            comments: v.comment_count || 0,
-            shares: v.share_count || 0,
-          },
+          stats: { plays: v.play_count || 0, likes: v.digg_count || 0, comments: v.comment_count || 0, shares: v.share_count || 0 },
         };
       }
     } catch { continue; }
@@ -66,24 +61,14 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
     if (r.ok) {
       const d = await r.json();
       const media = d.result || d.data || d;
-      const downloadUrl = media.mp4 || media.video || media.url ||
-        (media.medias && media.medias[0]?.url) ||
-        (media.links && media.links[0]?.url);
+      const downloadUrl = media.mp4 || media.video || media.url || (media.medias && media.medias[0]?.url) || (media.links && media.links[0]?.url);
       if (downloadUrl) {
-        return {
-          videoId: vid, downloadUrl,
-          title: media.title || `YouTube ${vid}`,
-          thumbnail: media.thumbnail || `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
-          mode, quality,
-        };
+        return { videoId: vid, downloadUrl, title: media.title || `YouTube ${vid}`, thumbnail: media.thumbnail || `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`, mode, quality };
       }
     }
   } catch {}
 
-  const cobaltInstances = [
-    "https://cobalt-api.kwiatekmiki.com/api/json",
-    "https://api.cobalt.tools/api/json",
-  ];
+  const cobaltInstances = ["https://cobalt-api.kwiatekmiki.com/api/json", "https://api.cobalt.tools/api/json"];
   for (const inst of cobaltInstances) {
     try {
       const r = await fetchT(inst, {
@@ -94,41 +79,26 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
       if (r.ok) {
         const d = await r.json();
         if (d.url) {
-          return {
-            videoId: vid, downloadUrl: d.url,
-            title: d.filename || `YouTube ${vid}`,
-            thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
-            mode, quality,
-          };
+          return { videoId: vid, downloadUrl: d.url, title: d.filename || `YouTube ${vid}`, thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`, mode, quality };
         }
       }
     } catch { continue; }
   }
 
-  return {
-    error: "Server YouTube sedang down. Coba lagi 1-2 menit.",
-    videoId: vid,
-    thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
-  };
+  return { error: "Server YouTube sedang down. Coba lagi 1-2 menit.", videoId: vid, thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg` };
 }
 
 /* ============ MEDIA DOWNLOADER ============ */
 async function mediaDownload(url) {
   if (/tiktok\.com|vt\.tiktok|vm\.tiktok/i.test(url)) {
     const d = await tiktokDownload(url);
-    if (d) return { platform: "tiktok", downloadUrl: d.hd || d.noWm, title: d.title, thumbnail: d.cover, extra: d };
+    if (d) return { platform: "tiktok", downloadUrl: d.hd || d.noWm, title: d.title, thumbnail: d.cover };
   }
   if (/youtube\.com|youtu\.be/i.test(url)) {
     const d = await youtubeDownload(url, "video", "1080");
     if (!d.error) return { platform: "youtube", downloadUrl: d.downloadUrl, title: d.title, thumbnail: d.thumbnail };
   }
-
-  // Cobalt fallback untuk platform lain
-  const cobaltInstances = [
-    "https://cobalt-api.kwiatekmiki.com/api/json",
-    "https://api.cobalt.tools/api/json",
-    "https://co.wuk.sh/api/json",
-  ];
+  const cobaltInstances = ["https://cobalt-api.kwiatekmiki.com/api/json", "https://api.cobalt.tools/api/json", "https://co.wuk.sh/api/json"];
   for (const inst of cobaltInstances) {
     try {
       const r = await fetchT(inst, {
@@ -138,18 +108,10 @@ async function mediaDownload(url) {
       }, 15000);
       if (r.ok) {
         const d = await r.json();
-        if (d.url) {
-          return {
-            platform: "generic",
-            downloadUrl: d.url,
-            title: d.filename || "media",
-            thumbnail: "",
-          };
-        }
+        if (d.url) return { platform: "generic", downloadUrl: d.url, title: d.filename || "media", thumbnail: "" };
       }
     } catch { continue; }
   }
-
   throw new Error("Platform tidak didukung atau video private.");
 }
 
@@ -198,8 +160,8 @@ async function inboxTempMail(token) {
   });
 }
 
-/* ============ PROXY (dengan force-download option) ============ */
-async function proxyStream(targetUrl, request, forceDownload = false) {
+/* ============ PROXY (FIXED — Force download with custom filename) ============ */
+async function proxyStream(targetUrl, request, forceDownload = false, customName = "") {
   const rangeHeader = request.headers.get("range") || "";
   const headers = { "User-Agent": UA, Referer: targetUrl, Accept: "*/*" };
   if (rangeHeader) headers.Range = rangeHeader;
@@ -214,11 +176,16 @@ async function proxyStream(targetUrl, request, forceDownload = false) {
   });
   if (!outHeaders.has("content-type")) outHeaders.set("Content-Type", "application/octet-stream");
 
-  // Force download
   if (forceDownload) {
-    const urlPath = new URL(targetUrl).pathname;
-    const rawName = urlPath.split("/").pop() || "download";
-    const filename = decodeURIComponent(rawName.split("?")[0]) || "download";
+    let filename = customName;
+    if (!filename) {
+      try {
+        const urlPath = new URL(targetUrl).pathname;
+        const rawName = urlPath.split("/").pop() || "download";
+        filename = decodeURIComponent(rawName.split("?")[0]) || "download";
+      } catch { filename = "download"; }
+    }
+    filename = filename.replace(/[^\w\s.-]/g, "_").slice(0, 100);
     outHeaders.set("Content-Disposition", `attachment; filename="${filename}"`);
   }
 
@@ -236,45 +203,23 @@ async function aiChat(messages, model, provider, apiKey) {
   if (provider === "groq") {
     const r = await fetchT("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model, messages, max_tokens: 2048, temperature: 0.7 }),
     }, 45000);
-    if (!r.ok) {
-      const err = await r.text();
-      throw new Error(`Groq error (${r.status}): ${err.slice(0, 200)}`);
-    }
+    if (!r.ok) { const err = await r.text(); throw new Error(`Groq error (${r.status}): ${err.slice(0, 200)}`); }
     const d = await r.json();
     return d.choices?.[0]?.message?.content || "";
   }
 
   if (provider === "gemini") {
-    // Convert messages ke format Gemini
     const systemMsg = messages.find((m) => m.role === "system");
     const chatMsgs = messages.filter((m) => m.role !== "system");
-    const contents = chatMsgs.map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
-
+    const contents = chatMsgs.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
     const body = { contents };
-    if (systemMsg) {
-      body.systemInstruction = { parts: [{ text: systemMsg.content }] };
-    }
-
+    if (systemMsg) body.systemInstruction = { parts: [{ text: systemMsg.content }] };
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const r = await fetchT(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }, 45000);
-
-    if (!r.ok) {
-      const err = await r.text();
-      throw new Error(`Gemini error (${r.status}): ${err.slice(0, 200)}`);
-    }
+    const r = await fetchT(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, 45000);
+    if (!r.ok) { const err = await r.text(); throw new Error(`Gemini error (${r.status}): ${err.slice(0, 200)}`); }
     const d = await r.json();
     return d.candidates?.[0]?.content?.parts?.[0]?.text || "";
   }
@@ -282,18 +227,10 @@ async function aiChat(messages, model, provider, apiKey) {
   if (provider === "openrouter") {
     const r = await fetchT("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://alltool.vercel.app",
-        "X-Title": "AllTool AI",
-      },
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://alltool.vercel.app", "X-Title": "AllTool AI" },
       body: JSON.stringify({ model, messages, max_tokens: 2048 }),
     }, 45000);
-    if (!r.ok) {
-      const err = await r.text();
-      throw new Error(`OpenRouter error (${r.status}): ${err.slice(0, 200)}`);
-    }
+    if (!r.ok) { const err = await r.text(); throw new Error(`OpenRouter error (${r.status}): ${err.slice(0, 200)}`); }
     const d = await r.json();
     return d.choices?.[0]?.message?.content || "";
   }
@@ -301,9 +238,17 @@ async function aiChat(messages, model, provider, apiKey) {
   throw new Error("Provider tidak dikenal: " + provider);
 }
 
-/* ============ MANGA (MangaDex — resmi, gratis, stabil) ============ */
+/* ============ MANGA (MangaDex) ============ */
 const MD_BASE = "https://api.mangadex.org";
-const MD_UA = "AllTool/9.0 (contact: alltool@example.com)";
+const MD_UA = "AllTool/10.0 (contact: alltool@example.com)";
+
+function getCoverUrl(manga) {
+  const coverRel = (manga.relationships || []).find((r) => r.type === "cover_art");
+  if (coverRel && coverRel.attributes?.fileName) {
+    return `https://uploads.mangadex.org/covers/${manga.id}/${coverRel.attributes.fileName}.256.jpg`;
+  }
+  return "";
+}
 
 async function mangaPopular(limit = 24) {
   const url = `${MD_BASE}/manga?limit=${limit}&order[followedCount]=desc&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true`;
@@ -317,7 +262,6 @@ async function mangaPopular(limit = 24) {
       thumb: getCoverUrl(m),
       status: m.attributes?.status || "unknown",
       year: m.attributes?.year || "",
-      desc: (m.attributes?.description?.en || Object.values(m.attributes?.description || {})[0] || "").slice(0, 200),
     })),
   };
 }
@@ -334,17 +278,8 @@ async function mangaSearch(q, limit = 24) {
       thumb: getCoverUrl(m),
       status: m.attributes?.status || "unknown",
       year: m.attributes?.year || "",
-      desc: (m.attributes?.description?.en || Object.values(m.attributes?.description || {})[0] || "").slice(0, 200),
     })),
   };
-}
-
-function getCoverUrl(manga) {
-  const coverRel = (manga.relationships || []).find((r) => r.type === "cover_art");
-  if (coverRel && coverRel.attributes?.fileName) {
-    return `https://uploads.mangadex.org/covers/${manga.id}/${coverRel.attributes.fileName}.256.jpg`;
-  }
-  return "";
 }
 
 async function mangaDetail(id) {
@@ -361,10 +296,7 @@ async function mangaDetail(id) {
     year: m.attributes?.year || "",
     desc: m.attributes?.description?.en || Object.values(m.attributes?.description || {})[0] || "",
     tags: (m.attributes?.tags || []).map((t) => t.attributes?.name?.en || "").filter(Boolean),
-    authors: (m.relationships || []).filter((r) => r.type === "author" || r.type === "artist").map((a) => a.attributes?.name || "").filter(Boolean),
   };
-
-  // Load chapters
   const chapters = await mangaChapters(id);
   return { info, chapters };
 }
@@ -381,7 +313,6 @@ async function mangaChapters(mangaId, limit = 500) {
     lang: c.attributes?.translatedLanguage || "",
     pages: c.attributes?.pages || 0,
     publishedAt: c.attributes?.publishAt || "",
-    group: (c.relationships || []).find((r) => r.type === "scanlation_group")?.attributes?.name || "",
   }));
 }
 
@@ -440,9 +371,7 @@ export async function POST(req) {
         const content = await aiChat(messages, model, provider, apiKey);
         if (!content) throw new Error("AI tidak memberikan respons.");
         return Response.json({ content });
-      } catch (e) {
-        return Response.json({ error: e.message }, { status: 500 });
-      }
+      } catch (e) { return Response.json({ error: e.message }, { status: 500 }); }
     }
 
     if (action === "manga-popular") {
@@ -508,13 +437,10 @@ export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const proxyUrl = searchParams.get("url");
   const forceDl = searchParams.get("dl") === "1";
+  const customName = searchParams.get("name") || "";
   if (proxyUrl) {
-    try { return await proxyStream(proxyUrl, req, forceDl); }
+    try { return await proxyStream(proxyUrl, req, forceDl, customName); }
     catch (e) { return Response.json({ error: e.message }, { status: 500 }); }
   }
-  return Response.json({
-    ok: true,
-    service: "AllTool API",
-    version: "10.0",
-  });
-    }
+  return Response.json({ ok: true, service: "AllTool API", version: "10.1" });
+      }
