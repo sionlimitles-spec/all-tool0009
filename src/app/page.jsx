@@ -2,9 +2,6 @@
   "name": "alltool",
   "version": "8.0.0",
   "private": true,
-  "engines": {
-    "node": "24.x"
-  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
