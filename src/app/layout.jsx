@@ -12,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id">
-      <body className="bg-zinc-950 text-zinc-100">{children}</body>
+    <html lang="id" data-theme="dark" data-accent="violet">
+      <body>{children}</body>
     </html>
   );
 }
