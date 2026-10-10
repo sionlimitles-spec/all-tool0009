@@ -1,12 +1,10 @@
-// src/app/api/route.js
-
 export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-async function fetchT(url, opts = {}, ms = 15000) {
+async function fetchT(url, opts = {}, ms = 12000) {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), ms);
   try {
@@ -19,57 +17,68 @@ async function fetchT(url, opts = {}, ms = 15000) {
   }
 }
 
-/* ============ TIKTOK (Server Alternatif) ============ */
+/* ============ TIKTOK ============ */
 async function tiktokDownload(url) {
-  // Server alternatif yang lebih stabil
-  const endpoints = [
-    `https://api.tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`,
-    `https://tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`,
-    `https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`,
-    `https://tikdown.vercel.app/api/download?url=${encodeURIComponent(url)}`,
-  ];
-
-  for (const u of endpoints) {
-    try {
-      const r = await fetchT(u, { headers: { "User-Agent": UA } }, 14000);
-      if (!r.ok) continue;
+  // Server 1: tikwm.com (paling stabil)
+  try {
+    const r = await fetchT(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`, {
+      headers: { "User-Agent": UA },
+    }, 10000);
+    if (r.ok) {
       const d = await r.json();
-
-      // Normalisasi respons dari berbagai server
-      let videoData = null;
       if (d.code === 0 && d.data) {
-        videoData = d.data;
-      } else if (d.video || d.data?.video) {
-        videoData = d.data || d;
-      }
-
-      if (videoData) {
+        const v = d.data;
         return {
-          title: videoData.title || "tiktok-video",
-          author: videoData.author?.unique_id || videoData.author || "",
-          nickname: videoData.author?.nickname || "",
-          cover: videoData.origin_cover || videoData.cover || videoData.thumbnail,
-          video: videoData.hdplay || videoData.play || videoData.video,
-          noWm: videoData.play || videoData.video || videoData.hdplay,
-          music: videoData.music || videoData.audio,
-          duration: videoData.duration || 0,
+          title: v.title || "tiktok-video",
+          author: v.author?.unique_id || "",
+          nickname: v.author?.nickname || "",
+          cover: v.origin_cover || v.cover,
+          video: v.hdplay || v.play,
+          noWm: v.play || v.hdplay,
+          music: v.music,
+          duration: v.duration || 0,
           stats: {
-            plays: videoData.play_count || 0,
-            likes: videoData.digg_count || 0,
-            comments: videoData.comment_count || 0,
-            shares: videoData.share_count || 0,
+            plays: v.play_count || 0,
+            likes: v.digg_count || 0,
+            comments: v.comment_count || 0,
+            shares: v.share_count || 0,
           },
         };
       }
-    } catch (e) {
-      console.warn(`[TikTok] Server gagal: ${u}`, e.message);
-      continue;
     }
+  } catch (e) {
+    console.warn("[TikTok tikwm]", e.message);
   }
+
+  // Server 2: tiklydown
+  try {
+    const r = await fetchT(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`, {
+      headers: { "User-Agent": UA },
+    }, 10000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.video || d.data?.video) {
+        const v = d.data || d;
+        return {
+          title: v.title || "tiktok-video",
+          author: v.author?.unique_id || "",
+          cover: v.cover || v.thumbnail,
+          video: v.video?.noWatermark || v.video?.playAddr || v.video,
+          noWm: v.video?.noWatermark || v.video?.playAddr || v.video,
+          music: v.music?.playUrl || v.music,
+          duration: v.duration || 0,
+          stats: { plays: 0, likes: 0, comments: 0, shares: 0 },
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("[TikTok tiklydown]", e.message);
+  }
+
   return null;
 }
 
-/* ============ YOUTUBE (Server Alternatif) ============ */
+/* ============ YOUTUBE ============ */
 function extractYtId(url) {
   const m = String(url || "").match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
   return m ? m[1] : null;
@@ -79,86 +88,155 @@ async function youtubeDownload(url, mode = "video") {
   const vid = extractYtId(url);
   if (!vid) return { error: "URL YouTube tidak valid." };
 
-  // Coba beberapa server API yang berbeda
-  const servers = [
-    `https://api.vevioz.com/api/button/mp3/${vid}`,
-    `https://api.vevioz.com/api/button/mp4/${vid}`,
-  ];
+  const cleanUrl = `https://www.youtube.com/watch?v=${vid}`;
 
-  for (const serverUrl of servers) {
-    try {
-      const r = await fetchT(serverUrl, { headers: { "User-Agent": UA } }, 15000);
-      if (!r.ok) continue;
-      const html = await r.text();
-
-      // Ekstrak URL download dari HTML
-      const match = html.match(/href="(https:\/\/[^"]+\.(mp4|mp3)[^"]*)"/);
-      if (match && match[1]) {
+  // Server 1: cobalt.tools API v10 (format baru)
+  try {
+    const r = await fetchT("https://api.cobalt.tools/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        url: cleanUrl,
+        videoQuality: mode === "audio" ? "360" : "720",
+        audioFormat: "mp3",
+        downloadMode: mode === "audio" ? "audio" : "video",
+      }),
+    }, 12000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.status === "tunnel" || d.status === "redirect") {
         return {
           videoId: vid,
-          downloadUrl: match[1].replace(/&amp;/g, "&"),
+          downloadUrl: d.url,
+          title: d.filename || `YouTube ${vid}`,
+          thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
+          mode,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("[YouTube cobalt v10]", e.message);
+  }
+
+  // Server 2: cobalt lama (v7 endpoint)
+  try {
+    const r = await fetchT("https://api.cobalt.tools/api/json", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        url: cleanUrl,
+        vQuality: mode === "audio" ? "128" : "720",
+        isAudioOnly: mode === "audio",
+      }),
+    }, 12000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.url) {
+        return {
+          videoId: vid,
+          downloadUrl: d.url,
           title: `YouTube ${vid}`,
           thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
           mode,
         };
       }
-    } catch (e) {
-      console.warn(`[YouTube] Server gagal: ${serverUrl}`, e.message);
-      continue;
     }
+  } catch (e) {
+    console.warn("[YouTube cobalt v7]", e.message);
   }
 
-  // Fallback terakhir: kembalikan thumbnail saja
+  // Server 3: cobalt instance alternatif
+  try {
+    const r = await fetchT("https://co.wuk.sh/api/json", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        url: cleanUrl,
+        vQuality: "720",
+        isAudioOnly: false,
+      }),
+    }, 12000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.url) {
+        return {
+          videoId: vid,
+          downloadUrl: d.url,
+          title: `YouTube ${vid}`,
+          thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
+          mode,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("[YouTube wuk]", e.message);
+  }
+
   return {
-    error: "Server downloader sibuk. Coba lagi 15-30 detik.",
+    error: "Server downloader YouTube sedang down. Coba lagi 1-2 menit.",
     videoId: vid,
     thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
   };
 }
 
-/* ============ TEMP MAIL - Menggunakan temp-mail.lol ============ */
-async function createTempMail() {
-  const r = await fetchT("https://api.tempmail.lol/v2/inbox/create", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
-  }, 10000);
+/* ============ TEMP MAIL (1secmail - paling stabil) ============ */
+let tmCached = null;
+let tmCachedAt = 0;
 
-  if (!r.ok) throw new Error("Gagal membuat email sementara.");
-  const d = await r.json();
-  return {
-    email: d.address,
-    token: d.token,
-    provider: "tempmail.lol",
-    expiresAt: Date.now() + 3600000, // 1 jam
+async function createTempMail() {
+  const r = await fetchT("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1", {}, 8000);
+  if (!r.ok) throw new Error("Server 1secmail tidak tersedia.");
+  const arr = await r.json();
+  if (!Array.isArray(arr) || !arr[0]) throw new Error("Gagal generate email.");
+
+  const [login, domain] = arr[0].split("@");
+  const result = {
+    email: arr[0],
+    login,
+    domain,
+    provider: "1secmail",
+    expiresAt: Date.now() + 7200000,
   };
+  tmCached = result;
+  tmCachedAt = Date.now();
+  return result;
 }
 
-async function inboxTempMail(token) {
-  if (!token) return [];
-  const r = await fetchT(`https://api.tempmail.lol/v2/inbox?token=${encodeURIComponent(token)}`, {}, 10000);
-  if (!r.ok) return [];
-  const d = await r.json();
-  return (d.emails || []).map((m) => ({
-    id: m.id,
+async function inbox1sec(login, domain) {
+  const r = await fetchT(`https://www.1secmail.com/api/v1/?action=getMessages&login=${encodeURIComponent(login)}&domain=${encodeURIComponent(domain)}`, {}, 10000);
+  if (!r.ok) throw new Error("Gagal ambil inbox.");
+  const j = await r.json();
+  if (!Array.isArray(j)) return [];
+
+  return j.map((m) => ({
+    id: String(m.id),
     from: { address: m.from, name: m.from },
-    subject: m.subject,
-    intro: m.subject,
-    createdAt: new Date(m.date).toISOString(),
+    subject: m.subject || "(Tanpa subjek)",
+    intro: m.subject || "(Tanpa subjek)",
+    createdAt: m.date,
     seen: false,
   }));
 }
 
-async function readTempMail(token, id) {
-  const emails = await inboxTempMail(token);
-  const email = emails.find((e) => e.id === id);
-  if (!email) throw new Error("Email tidak ditemukan.");
+async function read1sec(login, domain, id) {
+  const r = await fetchT(`https://www.1secmail.com/api/v1/?action=readMessage&login=${encodeURIComponent(login)}&domain=${encodeURIComponent(domain)}&id=${id}`, {}, 10000);
+  if (!r.ok) throw new Error("Gagal baca pesan.");
+  const d = await r.json();
   return {
-    subject: email.subject,
-    from: { address: email.from.address, name: email.from.name },
-    text: email.body || "",
-    html: email.html ? [email.html] : [],
-    createdAt: email.createdAt,
+    subject: d.subject || "(Tanpa subjek)",
+    from: { address: d.from, name: d.from },
+    text: d.textBody || d.body || "(Tidak ada isi teks)",
+    html: d.htmlBody ? [d.htmlBody] : [],
+    createdAt: d.date,
   };
 }
 
@@ -169,7 +247,7 @@ async function proxyStream(targetUrl, request) {
   if (rangeHeader) headers.Range = rangeHeader;
 
   const r = await fetchT(targetUrl, { headers }, 45000);
-  if (!r.ok && r.status !== 206) throw new Error(`Upstream ${r.status}`);
+  if (!r.ok && r.status !== 206) throw new Error(`Upstream error ${r.status}`);
 
   const outHeaders = new Headers();
   ["content-type", "content-length", "content-range", "accept-ranges"].forEach((k) => {
@@ -180,7 +258,7 @@ async function proxyStream(targetUrl, request) {
   outHeaders.set("Accept-Ranges", "bytes");
   outHeaders.set("Access-Control-Allow-Origin", "*");
 
-  return new NextResponse(r.body, { status: r.status, headers: outHeaders });
+  return new Response(r.body, { status: r.status, headers: outHeaders });
 }
 
 /* ============ HANDLER ============ */
@@ -191,60 +269,76 @@ export async function POST(req) {
 
     if (action === "tiktok") {
       if (!body.url || !/tiktok\.com|vt\.tiktok|vm\.tiktok/i.test(body.url)) {
-        return NextResponse.json({ error: "URL TikTok tidak valid." }, { status: 400 });
+        return Response.json({ error: "URL TikTok tidak valid." }, { status: 400 });
       }
       const d = await tiktokDownload(body.url);
-      if (!d) return NextResponse.json({ error: "Video tidak ditemukan atau privat." }, { status: 400 });
-      return NextResponse.json(d);
+      if (!d) {
+        return Response.json({ error: "Gagal ambil video. Pastikan video publik dan URL benar." }, { status: 400 });
+      }
+      return Response.json(d);
     }
 
     if (action === "youtube") {
       const d = await youtubeDownload(body.url, body.mode || "video");
-      if (d.error) return NextResponse.json(d, { status: d.videoId ? 503 : 400 });
-      return NextResponse.json(d);
+      if (d.error) {
+        return Response.json(d, { status: d.videoId ? 503 : 400 });
+      }
+      return Response.json(d);
     }
 
     if (action === "tempmail-create") {
       try {
         const data = await createTempMail();
-        return NextResponse.json(data);
+        return Response.json(data);
       } catch (e) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        return Response.json({ error: e.message }, { status: 500 });
       }
     }
 
     if (action === "tempmail-inbox") {
-      if (!body.token) return NextResponse.json([]);
-      return NextResponse.json(await inboxTempMail(body.token));
+      if (!body.login || !body.domain) return Response.json([]);
+      try {
+        const msgs = await inbox1sec(body.login, body.domain);
+        return Response.json(msgs);
+      } catch {
+        return Response.json([]);
+      }
     }
 
     if (action === "tempmail-read") {
-      if (!body.token || !body.id) return NextResponse.json({ error: "Parameter kurang." }, { status: 400 });
-      return NextResponse.json(await readTempMail(body.token, body.id));
+      if (!body.login || !body.domain || !body.id) {
+        return Response.json({ error: "Parameter kurang." }, { status: 400 });
+      }
+      try {
+        const d = await read1sec(body.login, body.domain, body.id);
+        return Response.json(d);
+      } catch (e) {
+        return Response.json({ error: e.message }, { status: 500 });
+      }
     }
 
     if (action === "ip-lookup") {
       const target = body.ip ? `/${body.ip}` : "";
       const r = await fetchT(`https://ipapi.co${target}/json/`, {}, 8000);
-      return NextResponse.json(await r.json());
+      return Response.json(await r.json());
     }
 
     if (action === "scan-url") {
-      if (!body.url) return NextResponse.json({ error: "URL wajib." }, { status: 400 });
+      if (!body.url) return Response.json({ error: "URL wajib." }, { status: 400 });
       const r = await fetchT("https://urlscan.io/api/v1/scan/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: body.url, visibility: "public" }),
-      }, 15000);
+      }, 12000);
       const d = await r.json();
-      return NextResponse.json(d);
+      return Response.json(d);
     }
 
     if (action === "scan-url-result") {
-      if (!body.id) return NextResponse.json({ error: "ID wajib." }, { status: 400 });
+      if (!body.id) return Response.json({ error: "ID wajib." }, { status: 400 });
       const r = await fetchT(`https://urlscan.io/api/v1/result/${body.id}/`, {}, 10000);
       const d = await r.json();
-      return NextResponse.json({
+      return Response.json({
         verdicts: d.verdicts?.overall || null,
         score: d.verdicts?.overall?.score || 0,
         malicious: d.verdicts?.overall?.malicious || false,
@@ -254,20 +348,19 @@ export async function POST(req) {
     }
 
     if (action === "scan-hash") {
-      if (!body.hash) return NextResponse.json({ error: "Hash wajib." }, { status: 400 });
+      if (!body.hash) return Response.json({ error: "Hash wajib." }, { status: 400 });
       const r = await fetchT("https://mb-api.abuse.ch/api/v1/", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: `query=get_info&hash=${body.hash}`,
       }, 12000);
-      const d = await r.json();
-      return NextResponse.json(d);
+      return Response.json(await r.json());
     }
 
-    return NextResponse.json({ error: "Aksi tidak dikenal." }, { status: 400 });
+    return Response.json({ error: "Aksi tidak dikenal." }, { status: 400 });
   } catch (e) {
-    console.error("[API]", e);
-    return NextResponse.json({ error: e.message || "Kesalahan server." }, { status: 500 });
+    console.error("[API Error]", e);
+    return Response.json({ error: e.message || "Kesalahan server." }, { status: 500 });
   }
 }
 
@@ -278,8 +371,13 @@ export async function GET(req) {
     try {
       return await proxyStream(proxyUrl, req);
     } catch (e) {
-      return NextResponse.json({ error: e.message }, { status: 500 });
+      return Response.json({ error: e.message }, { status: 500 });
     }
   }
-  return NextResponse.json({ ok: true, service: "AllTool API", version: "5.0" });
-           }
+  return Response.json({
+    ok: true,
+    service: "AllTool API",
+    version: "6.0",
+    endpoints: ["tiktok", "youtube", "tempmail-create", "tempmail-inbox", "tempmail-read", "ip-lookup", "scan-url", "scan-url-result", "scan-hash"],
+  });
+    }
