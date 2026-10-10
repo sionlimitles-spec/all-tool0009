@@ -5,13 +5,20 @@ import * as I from "lucide-react";
 import * as T from "@/lib/tools";
 import { supabaseReady, signUp, signIn, signOut, getUser, onAuthChange, cloudGetFavorites, cloudAddFavorite, cloudRemoveFavorite } from "@/lib/supabase";
 
-/* ============ REGISTRY — 31 TOOLS ============ */
+/* ============ REGISTRY — 40 TOOLS ============ */
 const TOOLS = [
-  /* ---- TEXT (4) ---- */
-  { id: "word-counter", n: "Word Counter", d: "Hitung kata, karakter, kalimat, paragraf.", c: "text", i: "Hash", f: T.WordCounter },
-  { id: "case-converter", n: "Case Converter", d: "Ubah kapitalisasi teks.", c: "text", i: "Type", f: T.CaseConverter },
-  { id: "lorem-ipsum", n: "Lorem Ipsum", d: "Generator teks dummy.", c: "text", i: "FileText", f: T.LoremIpsum },
-  { id: "markdown-preview", n: "Markdown Preview", d: "Live render markdown.", c: "text", i: "FileCode", f: T.MarkdownPreview },
+  /* ---- AI (1) ---- */
+  { id: "ai-chat", n: "AI Chat", d: "Ngobrol dengan AI, banyak model tersedia.", c: "ai", i: "Bot", f: T.AIChat },
+
+  /* ---- DOWNLOADER (5) ---- */
+  { id: "media-downloader", n: "Media Downloader", d: "Download dari TikTok, IG, FB, X, YouTube, dll.", c: "media", i: "Download", f: T.MediaDownloader },
+  { id: "tiktok", n: "TikTok Downloader", d: "Download TikTok 1080p tanpa watermark.", c: "media", i: "Music", f: T.TikTokDownloader },
+  { id: "youtube", n: "YouTube Downloader", d: "Download YouTube hingga 1080p.", c: "media", i: "Youtube", f: T.YouTubeDownloader },
+  { id: "terabox", n: "TeraBox Downloader", d: "Ambil file dari share link TeraBox.", c: "media", i: "FolderOpen", f: T.TeraboxDownloader },
+  { id: "temp-mail", n: "Temp Mail", d: "Email sementara instan.", c: "media", i: "Mail", f: T.TempMail },
+
+  /* ---- HIBURAN (1) ---- */
+  { id: "komik", n: "Komik Reader", d: "Baca manga dan manhwa Bahasa Indonesia.", c: "entertainment", i: "BookOpen", f: T.KomikReader },
 
   /* ---- DEVELOPER (11) ---- */
   { id: "json-formatter", n: "JSON Formatter", d: "Format, validasi, minify JSON.", c: "developer", i: "Braces", f: T.JsonFormatter },
@@ -21,10 +28,10 @@ const TOOLS = [
   { id: "qr-generator", n: "QR Code Generator", d: "Buat QR code custom warna.", c: "developer", i: "QrCode", f: T.QrGenerator },
   { id: "html-editor", n: "HTML Editor", d: "Live preview HTML/CSS/JS.", c: "developer", i: "Code2", f: T.HtmlEditor },
   { id: "css-playground", n: "CSS Playground", d: "Live CSS editor dengan preview.", c: "developer", i: "Palette", f: T.CssPlayground },
-  { id: "html-minifier", n: "HTML Minifier", d: "Minify HTML code.", c: "developer", i: "FileCode2", f: T.HtmlMinifier },
-  { id: "css-minifier", n: "CSS Minifier", d: "Minify CSS code.", c: "developer", i: "Paintbrush", f: T.CssMinifier },
-  { id: "js-minifier", n: "JS Minifier", d: "Minify JavaScript code.", c: "developer", i: "FileTerminal", f: T.JsMinifier },
-  { id: "virus-scanner", n: "Virus Scanner", d: "Scan URL dan file berbahaya.", c: "developer", i: "ShieldAlert", f: T.VirusScanner },
+  { id: "html-minifier", n: "HTML Minifier", d: "Minify kode HTML.", c: "developer", i: "FileCode2", f: T.HtmlMinifier },
+  { id: "css-minifier", n: "CSS Minifier", d: "Minify kode CSS.", c: "developer", i: "Paintbrush", f: T.CssMinifier },
+  { id: "js-minifier", n: "JS Minifier", d: "Minify kode JavaScript.", c: "developer", i: "FileTerminal", f: T.JsMinifier },
+  { id: "virus-scanner", n: "Virus Scanner", d: "Scan URL, hash, dan file berbahaya.", c: "developer", i: "ShieldAlert", f: T.VirusScanner },
 
   /* ---- IMAGE (3) ---- */
   { id: "image-compressor", n: "Image Compressor", d: "Kompres gambar kualitas custom.", c: "image", i: "Minimize", f: T.ImageCompressor },
@@ -41,22 +48,30 @@ const TOOLS = [
   { id: "password-generator", n: "Password Generator", d: "Buat password kuat dan aman.", c: "security", i: "Lock", f: T.PasswordGenerator },
   { id: "password-strength", n: "Password Strength", d: "Cek kekuatan password Anda.", c: "security", i: "ShieldCheck", f: T.PasswordStrength },
 
-  /* ---- MEDIA (5) ---- */
-  { id: "downloader-tiktok", n: "TikTok Downloader", d: "Unduh TikTok tanpa watermark.", c: "media", i: "Music", f: T.TikTokDownloader },
-  { id: "downloader-youtube", n: "YouTube Downloader", d: "Unduh video/audio YouTube.", c: "media", i: "Youtube", f: T.YouTubeDownloader },
-  { id: "temp-mail", n: "Temp Mail", d: "Email sementara instan (1secmail).", c: "media", i: "Mail", f: T.TempMail },
-  { id: "ip-lookup", n: "IP Lookup", d: "Cek lokasi dan info alamat IP.", c: "media", i: "Globe", f: T.IpLookup },
-  { id: "apk-compiler", n: "APK Compiler", d: "Ubah web/HTML jadi APK Android.", c: "media", i: "Smartphone", f: T.ApkCompiler },
+  /* ---- TEXT (4) ---- */
+  { id: "word-counter", n: "Word Counter", d: "Hitung kata, karakter, kalimat, paragraf.", c: "text", i: "Hash", f: T.WordCounter },
+  { id: "case-converter", n: "Case Converter", d: "Ubah kapitalisasi teks.", c: "text", i: "Type", f: T.CaseConverter },
+  { id: "lorem-ipsum", n: "Lorem Ipsum", d: "Generator teks dummy.", c: "text", i: "FileText", f: T.LoremIpsum },
+  { id: "markdown-preview", n: "Markdown Preview", d: "Live render markdown.", c: "text", i: "FileCode", f: T.MarkdownPreview },
 
-  /* ---- UTILITY (2) ---- */
+  /* ---- UTILITY (3) ---- */
+  { id: "apk-compiler", n: "APK Compiler", d: "Ubah web/HTML jadi APK Android.", c: "utility", i: "Smartphone", f: T.ApkCompiler },
   { id: "color-picker", n: "Color Picker", d: "Konversi HEX, RGB, HSL.", c: "utility", i: "Palette", f: T.ColorPicker },
   { id: "text-to-speech", n: "Text to Speech", d: "Ubah teks jadi suara.", c: "utility", i: "Volume2", f: T.TextToSpeech },
+  { id: "ip-lookup", n: "IP Lookup", d: "Cek lokasi dan info alamat IP.", c: "utility", i: "Globe", f: T.IpLookup },
 ];
 
 const CATS = [
-  { id: "all", n: "Semua" }, { id: "text", n: "Teks" }, { id: "developer", n: "Developer" },
-  { id: "image", n: "Gambar" }, { id: "calculator", n: "Kalkulator" }, { id: "security", n: "Keamanan" },
-  { id: "media", n: "Media" }, { id: "utility", n: "Utilitas" },
+  { id: "all", n: "Semua" },
+  { id: "ai", n: "AI", i: "Bot" },
+  { id: "media", n: "Downloader", i: "Download" },
+  { id: "entertainment", n: "Hiburan", i: "BookOpen" },
+  { id: "developer", n: "Developer", i: "Code2" },
+  { id: "image", n: "Gambar", i: "Image" },
+  { id: "calculator", n: "Kalkulator", i: "Calculator" },
+  { id: "security", n: "Keamanan", i: "Shield" },
+  { id: "text", n: "Teks", i: "Type" },
+  { id: "utility", n: "Utilitas", i: "Wrench" },
 ];
 
 const LANGS = [
@@ -73,7 +88,7 @@ const LANGS = [
 ];
 
 const ACCENTS = ["violet", "blue", "emerald", "rose", "amber", "pink", "cyan"];
-const ACCENT_HEX = { violet: "#7c3aed", blue: "#2563eb", emerald: "#059669", rose: "#e11d48", amber: "#d97706", pink: "#db2777", cyan: "#0891b2" };
+const ACCENT_HEX = { violet: "#a78bfa", blue: "#60a5fa", emerald: "#34d399", rose: "#fb7185", amber: "#fbbf24", pink: "#f472b6", cyan: "#22d3ee" };
 
 const Icon = ({ name, size = 18, color }) => {
   const C = I[name] || I.Wrench;
@@ -93,7 +108,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authModal, setAuthModal] = useState(false);
   const [history, setHistory] = useState([]);
-  const [settings, setSettings] = useState({ lang: "id", theme: "light", accent: "violet", fontSize: "medium", favorites: [] });
+  const [settings, setSettings] = useState({ lang: "id", theme: "dark", accent: "violet", fontSize: "medium", favorites: [] });
 
   const toast = useCallback((msg, type = "info") => {
     const id = Date.now() + Math.random();
@@ -101,10 +116,10 @@ export default function App() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
   }, []);
 
-  const addHistory = useCallback((toolId, meta = {}) => {
+  const addHistory = useCallback((toolId) => {
     try {
       const local = JSON.parse(localStorage.getItem("alltool-history") || "[]");
-      const entry = { tool_id: toolId, meta, created_at: new Date().toISOString() };
+      const entry = { tool_id: toolId, created_at: new Date().toISOString() };
       local.unshift(entry);
       localStorage.setItem("alltool-history", JSON.stringify(local.slice(0, 50)));
       setHistory(local.slice(0, 50));
@@ -196,16 +211,16 @@ export default function App() {
 
   return (
     <div className="bg-page">
-      <div className={`overlay ${sidebar ? "on" : ""}`} onClick={() => setSidebar(false)} style={{ display: sidebar ? "block" : "none", position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 30 }} />
+      <div className={`overlay ${sidebar ? "on" : ""}`} onClick={() => setSidebar(false)} style={{ display: sidebar ? "block" : "none", position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 30, backdropFilter: "blur(4px)" }} />
 
       <aside className={`side ${sidebar ? "on" : ""}`}>
         <button onClick={() => { setPage("home"); setCurrent(null); setSidebar(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "6px 8px", marginBottom: 20, textAlign: "left" }}>
-          <div className="ic" style={{ background: "linear-gradient(135deg, var(--p), var(--ph))", color: "#fff", width: 42, height: 42 }}>
+          <div className="ic" style={{ background: "linear-gradient(135deg, var(--p), var(--ph))", color: "#fff", width: 42, height: 42, border: "none" }}>
             <I.Sparkles size={22} />
           </div>
           <div>
             <div className="grad" style={{ fontSize: 19, fontWeight: 800, lineHeight: 1.1 }}>AllTool</div>
-            <div className="soft" style={{ fontWeight: 600 }}>v4.0 · {TOOLS.length} tools</div>
+            <div className="soft" style={{ fontWeight: 600 }}>v9.0 · {TOOLS.length} tools</div>
           </div>
         </button>
 
@@ -257,7 +272,7 @@ export default function App() {
           <button className="btn-g" onClick={() => setSidebar(!sidebar)} style={{ display: sidebar ? "none" : "flex" }} aria-label="Menu">
             <I.Menu size={22} />
           </button>
-          <button onClick={() => setPalette(true)} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", border: "1.5px solid var(--bd)", borderRadius: 12, background: "var(--card-solid)", color: "var(--mut)", fontSize: 13, textAlign: "left", maxWidth: 480 }}>
+          <button onClick={() => setPalette(true)} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", border: "1.5px solid var(--border)", borderRadius: 12, background: "var(--card-solid)", color: "var(--text-muted)", fontSize: 13, textAlign: "left", maxWidth: 480 }}>
             <I.Search size={16} />
             <span style={{ flex: 1 }}>Cari tools... (Ctrl K)</span>
             <kbd className="kbd">/</kbd>
@@ -299,7 +314,7 @@ export default function App() {
 /* ============ SUB COMPONENTS ============ */
 function NavItem({ active, onClick, icon, label, badge }) {
   return (
-    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 13px", borderRadius: 11, fontSize: 13.5, fontWeight: 600, background: active ? "linear-gradient(135deg, var(--p), var(--ph))" : "transparent", color: active ? "#fff" : "var(--text)", transition: "all 0.18s", width: "100%", textAlign: "left", boxShadow: active ? "0 4px 12px -4px var(--p)" : "none" }}>
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 13px", borderRadius: 11, fontSize: 13.5, fontWeight: 600, background: active ? "linear-gradient(135deg, var(--p), var(--ph))" : "transparent", color: active ? "#fff" : "var(--text)", transition: "all 0.2s", width: "100%", textAlign: "left", boxShadow: active ? "0 4px 16px -4px var(--p), 0 0 20px var(--glow)" : "none" }}>
       <Icon name={icon} size={16} />
       <span style={{ flex: 1 }}>{label}</span>
       {badge != null && badge > 0 && <span style={{ fontSize: 11, opacity: 0.75 }}>{badge}</span>}
@@ -314,7 +329,7 @@ function ToolCard({ tool, openTool, isFav, toggleFav }) {
       <div style={{ fontSize: 14.5, fontWeight: 700, lineHeight: 1.35 }}>{tool.n}</div>
       <div className="mut" style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.5 }}>{tool.d}</div>
       <button onClick={(e) => { e.stopPropagation(); toggleFav(); }} className="btn-g" style={{ position: "absolute", top: 12, right: 12, padding: 7 }}>
-        <I.Heart size={15} fill={isFav ? "var(--p)" : "none"} color={isFav ? "var(--p)" : "var(--soft)"} />
+        <I.Heart size={15} fill={isFav ? "var(--p)" : "none"} color={isFav ? "var(--p)" : "var(--text-soft)"} />
       </button>
     </div>
   );
@@ -332,14 +347,14 @@ function HomePage({ filtered, cat, setCat, openTool, favTools, toggleFav, favori
           <br />Satu Platform.
         </h1>
         <p className="sub" style={{ maxWidth: 640 }}>
-          {TOOLS.length} tools berkualitas untuk developer, desainer, dan produktivitas harian. Downloader TikTok tanpa watermark, YouTube, temp mail, HTML editor, APK compiler, virus scanner, dan banyak lagi.
+          {TOOLS.length} tools berkualitas untuk developer, kreator, dan produktivitas harian. AI Chat, downloader TikTok/YouTube 1080p, komik reader, temp mail, APK compiler, dan banyak lagi.
         </p>
 
         <div className="grid" style={{ marginTop: 28, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
           {[
-            { i: "Zap", t: "Cepat", d: "Instan" },
-            { i: "Shield", t: "Aman", d: "Privasi" },
-            { i: "Globe", t: "50 Bahasa", d: "Global" },
+            { i: "Bot", t: "AI Chat", d: "Multi-model" },
+            { i: "Download", t: "Downloader", d: "HD 1080p" },
+            { i: "BookOpen", t: "Komik Reader", d: "Bahasa ID" },
             { i: "Sparkles", t: "Gratis", d: "Selamanya" },
           ].map((s) => (
             <div key={s.t} className="card">
@@ -369,13 +384,18 @@ function HomePage({ filtered, cat, setCat, openTool, favTools, toggleFav, favori
           <span className="mut">{filtered.length} item</span>
         </div>
         <div className="row" style={{ marginBottom: 18 }}>
-          {CATS.map((c) => <button key={c.id} className={`chip ${cat === c.id ? "active" : ""}`} onClick={() => setCat(c.id)}>{c.n}</button>)}
+          {CATS.map((c) => (
+            <button key={c.id} className={`chip ${cat === c.id ? "active" : ""}`} onClick={() => setCat(c.id)}>
+              {c.i && <Icon name={c.i} size={12} />}
+              {c.n}
+            </button>
+          ))}
         </div>
         <div className="grid">
           {filtered.map((t) => <ToolCard key={t.id} tool={t} openTool={openTool} isFav={favorites.includes(t.id)} toggleFav={() => toggleFav(t.id)} />)}
         </div>
         {filtered.length === 0 && (
-          <div style={{ padding: 80, textAlign: "center", color: "var(--mut)" }}>
+          <div style={{ padding: 80, textAlign: "center", color: "var(--text-muted)" }}>
             <I.SearchX size={48} style={{ margin: "0 auto 14px", opacity: 0.35 }} />
             <div style={{ fontSize: 15, fontWeight: 600 }}>Tidak ada tools ditemukan</div>
           </div>
@@ -391,7 +411,12 @@ function ToolsPage({ filtered, cat, setCat, openTool, favorites, toggleFav }) {
       <h1 className="h1" style={{ marginBottom: 6 }}><span className="grad">Semua Tools</span></h1>
       <p className="sub" style={{ marginBottom: 24 }}>{TOOLS.length} alat tersedia. Klik untuk membuka.</p>
       <div className="row" style={{ marginBottom: 18 }}>
-        {CATS.map((c) => <button key={c.id} className={`chip ${cat === c.id ? "active" : ""}`} onClick={() => setCat(c.id)}>{c.n}</button>)}
+        {CATS.map((c) => (
+          <button key={c.id} className={`chip ${cat === c.id ? "active" : ""}`} onClick={() => setCat(c.id)}>
+            {c.i && <Icon name={c.i} size={12} />}
+            {c.n}
+          </button>
+        ))}
       </div>
       <div className="grid">
         {filtered.map((t) => <ToolCard key={t.id} tool={t} openTool={openTool} isFav={favorites.includes(t.id)} toggleFav={() => toggleFav(t.id)} />)}
@@ -406,7 +431,7 @@ function HistoryPage({ history, openTool }) {
       <h1 className="h1" style={{ marginBottom: 6 }}><span className="grad">Riwayat</span></h1>
       <p className="sub" style={{ marginBottom: 24 }}>Tools yang baru Anda buka.</p>
       {history.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: 60, color: "var(--mut)" }}>
+        <div className="card" style={{ textAlign: "center", padding: 60, color: "var(--text-muted)" }}>
           <I.Clock size={44} style={{ margin: "0 auto 12px", opacity: 0.35 }} />
           <div style={{ fontSize: 14, fontWeight: 600 }}>Belum ada riwayat</div>
         </div>
@@ -422,7 +447,7 @@ function HistoryPage({ history, openTool }) {
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{tool.n}</div>
                   <div className="soft" style={{ marginTop: 3 }}>{new Date(h.created_at).toLocaleString("id-ID")}</div>
                 </div>
-                <I.ArrowRight size={16} color="var(--mut)" />
+                <I.ArrowRight size={16} color="var(--text-muted)" />
               </button>
             );
           })}
@@ -466,7 +491,7 @@ function SettingsPage({ settings, setSettings, toast, user }) {
         <div className="card">
           <div className="tag" style={{ marginBottom: 14 }}>TEMA</div>
           <div className="row">
-            {["light", "dark", "system"].map((t) => (
+            {["dark", "light", "system"].map((t) => (
               <button key={t} className={`chip ${settings.theme === t ? "active" : ""}`} onClick={() => set("theme")(t)}>
                 <Icon name={t === "light" ? "Sun" : t === "dark" ? "Moon" : "Monitor"} size={14} />
                 {t === "light" ? "Terang" : t === "dark" ? "Gelap" : "Sistem"}
@@ -479,7 +504,7 @@ function SettingsPage({ settings, setSettings, toast, user }) {
           <div className="tag" style={{ marginBottom: 14 }}>WARNA AKSEN</div>
           <div className="row" style={{ gap: 14 }}>
             {ACCENTS.map((a) => (
-              <button key={a} onClick={() => set("accent")(a)} style={{ width: 46, height: 46, borderRadius: "50%", background: ACCENT_HEX[a], outline: settings.accent === a ? `3px solid ${ACCENT_HEX[a]}` : "none", outlineOffset: 4, display: "flex", alignItems: "center", justifyContent: "center", transition: "transform 0.15s" }}>
+              <button key={a} onClick={() => set("accent")(a)} style={{ width: 46, height: 46, borderRadius: "50%", background: ACCENT_HEX[a], outline: settings.accent === a ? `3px solid ${ACCENT_HEX[a]}` : "none", outlineOffset: 4, display: "flex", alignItems: "center", justifyContent: "center", transition: "transform 0.2s", boxShadow: settings.accent === a ? `0 0 20px ${ACCENT_HEX[a]}` : "none" }}>
                 {settings.accent === a && <I.Check size={20} color="#fff" />}
               </button>
             ))}
@@ -500,12 +525,12 @@ function SettingsPage({ settings, setSettings, toast, user }) {
         <div className="card">
           <div className="tag" style={{ marginBottom: 14 }}>BAHASA ({LANGS.length})</div>
           <div style={{ position: "relative", marginBottom: 14 }}>
-            <I.Search size={15} style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--mut)" }} />
+            <I.Search size={15} style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
             <input className="inp" style={{ paddingLeft: 38 }} value={searchLang} onChange={(e) => setSearchLang(e.target.value)} placeholder="Cari bahasa..." />
           </div>
-          <div style={{ maxHeight: 300, overflowY: "auto", border: "1.5px solid var(--bd)", borderRadius: 12 }}>
+          <div style={{ maxHeight: 300, overflowY: "auto", border: "1.5px solid var(--border)", borderRadius: 12 }}>
             {filtered.map(([code, name]) => (
-              <button key={code} onClick={() => set("lang")(code)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", padding: "11px 15px", fontSize: 13, background: settings.lang === code ? "var(--ps)" : "transparent", color: settings.lang === code ? "var(--p)" : "var(--text)", borderBottom: "1px solid var(--bd)", textAlign: "left" }}>
+              <button key={code} onClick={() => set("lang")(code)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", padding: "11px 15px", fontSize: 13, background: settings.lang === code ? "var(--ps)" : "transparent", color: settings.lang === code ? "var(--p)" : "var(--text)", borderBottom: "1px solid var(--border)", textAlign: "left" }}>
                 <span style={{ fontWeight: settings.lang === code ? 700 : 400 }}>{name}</span>
                 {settings.lang === code && <I.Check size={15} />}
               </button>
@@ -533,7 +558,7 @@ function SettingsPage({ settings, setSettings, toast, user }) {
         <div className="card">
           <div className="tag" style={{ marginBottom: 8 }}>RESET DATA</div>
           <p className="mut" style={{ marginBottom: 14 }}>Hapus preferensi lokal dan mulai dari awal.</p>
-          <button className="btn btn-danger" onClick={() => { localStorage.clear(); setSettings({ lang: "id", theme: "light", accent: "violet", fontSize: "medium", favorites: [] }); toast("Data direset", "success"); }}>
+          <button className="btn btn-danger" onClick={() => { localStorage.clear(); setSettings({ lang: "id", theme: "dark", accent: "violet", fontSize: "medium", favorites: [] }); toast("Data direset", "success"); }}>
             <I.Trash2 size={14} />Reset Semua Data
           </button>
         </div>
@@ -550,16 +575,16 @@ function AboutPage() {
       <div className="col" style={{ maxWidth: 720 }}>
         <div className="card">
           <p className="mut" style={{ lineHeight: 1.8 }}>
-            AllTool v4.0 adalah platform kumpulan alat serbaguna yang dapat digunakan secara gratis.
-            Terdiri dari {TOOLS.length} alat pilihan yang mencakup teks, developer, gambar, kalkulator, keamanan, media, dan utilitas.
-            Semua alat dirancang untuk cepat, bersih, tanpa iklan, dan tanpa gangguan.
+            AllTool v9.0 adalah platform kumpulan alat serbaguna yang dapat digunakan secara gratis.
+            Terdiri dari {TOOLS.length} alat pilihan yang mencakup AI, downloader, hiburan, developer, gambar,
+            kalkulator, keamanan, teks, dan utilitas. Semua alat dirancang untuk cepat, bersih, tanpa iklan.
           </p>
         </div>
         <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
           {[
-            { i: "Zap", t: "Cepat", d: "Semua alat dioptimalkan untuk performa maksimal." },
-            { i: "Shield", t: "Aman", d: "Data diproses di browser, tidak dikirim ke server." },
-            { i: "Globe", t: "Multi Bahasa", d: "Tersedia dalam 50 bahasa dunia." },
+            { i: "Bot", t: "AI Chat", d: "Multi model gratis & premium." },
+            { i: "Zap", t: "Cepat", d: "Semua alat dioptimalkan untuk performa." },
+            { i: "Shield", t: "Aman", d: "Data diproses di browser." },
             { i: "Sparkles", t: "Gratis", d: "Selamanya gratis tanpa iklan." },
           ].map((f) => (
             <div key={f.t} className="card">
@@ -571,8 +596,8 @@ function AboutPage() {
         </div>
         <div className="card" style={{ textAlign: "center", padding: 28 }}>
           <div className="soft" style={{ marginBottom: 8 }}>DIBUAT DENGAN</div>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>Next.js · Vercel · Supabase · Lucide</div>
-          <div className="soft" style={{ marginTop: 8 }}>AllTool v4.0 · 2025</div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Next.js · Vercel · Supabase · OpenRouter · Lucide</div>
+          <div className="soft" style={{ marginTop: 8 }}>AllTool v9.0 · 2025</div>
         </div>
       </div>
     </>
@@ -596,13 +621,13 @@ function Palette({ onClose, openTool }) {
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: "1px solid var(--bd)" }}>
-          <I.Search size={20} style={{ color: "var(--mut)" }} />
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari tools..." style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 16 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+          <I.Search size={20} style={{ color: "var(--text-muted)" }} />
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari tools..." style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 16, color: "var(--text)" }} />
           <button className="btn-g" onClick={onClose}><I.X size={18} /></button>
         </div>
         <div style={{ maxHeight: "55vh", overflowY: "auto", padding: 10 }}>
-          {list.length === 0 && <div style={{ padding: 50, textAlign: "center", color: "var(--mut)", fontSize: 14 }}>Tidak ditemukan</div>}
+          {list.length === 0 && <div style={{ padding: 50, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>Tidak ditemukan</div>}
           {list.map((t, i) => (
             <button key={t.id} onClick={() => { openTool(t.id); onClose(); }} onMouseEnter={() => setSel(i)} style={{ display: "flex", alignItems: "center", gap: 13, width: "100%", padding: "11px 14px", borderRadius: 12, background: sel === i ? "var(--ps)" : "transparent", textAlign: "left" }}>
               <div className="ic" style={{ width: 36, height: 36 }}><Icon name={t.i} size={17} /></div>
@@ -613,7 +638,7 @@ function Palette({ onClose, openTool }) {
             </button>
           ))}
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 20px", borderTop: "1px solid var(--bd)", fontSize: 11, color: "var(--soft)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 20px", borderTop: "1px solid var(--border)", fontSize: 11, color: "var(--text-soft)" }}>
           <span>Enter untuk buka</span><span>Esc untuk tutup</span>
         </div>
       </div>
