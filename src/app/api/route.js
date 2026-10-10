@@ -316,86 +316,120 @@ async function aiChat(messages, model, provider, apiKey) {
   throw new Error("Provider tidak dikenal: " + provider);
 }
 
-/* ============ MANGA (MangaMint — Komik Indonesia) ============ */
-const MM_BASE = "https://mangamint.kaedenoki.net/api";
-const MM_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+/* ============ MANGA — BacaKomik (Sanka Vollerei) ============ */
+const SK_BASE = "https://api.sankavollerei.web.id";
+const SK_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
 async function mangaPopular(page = 1) {
-  const r = await fetchT(`${MM_BASE}/manga/page/${page}`, { headers: { "User-Agent": MM_UA } }, 12000);
-  if (!r.ok) throw new Error("Gagal load manga.");
+  // Coba populer dulu
+  try {
+    const r = await fetchT(`${SK_BASE}/comic/bacakomik/populer`, { headers: { "User-Agent": SK_UA } }, 12000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.success && d.komikList && d.komikList.length > 0) {
+        return {
+          list: d.komikList.map((m) => ({
+            id: m.slug,
+            title: m.title,
+            thumb: m.cover,
+            type: m.type || "Manga",
+            rating: m.rating || "",
+            chapter: m.chapter || "",
+            updated: m.date || "",
+          })),
+          hasNext: false,
+          currentPage: 1,
+        };
+      }
+    }
+  } catch (e) { console.warn("[bacakomik populer]", e.message); }
+
+  // Fallback latest (kalau butuh pagination, ganti URL ke /list/ + page)
+  const url = page > 1
+    ? `${SK_BASE}/comic/bacakomik/list/${page}`
+    : `${SK_BASE}/comic/bacakomik/latest`;
+
+  const r = await fetchT(url, { headers: { "User-Agent": SK_UA } }, 12000);
+  if (!r.ok) throw new Error("Gagal load komik.");
   const d = await r.json();
-  const list = d.manga_list || d.data || d || [];
   return {
-    list: list.map((m) => ({
-      id: m.endpoint || m.slug || m.id,
+    list: (d.komikList || []).map((m) => ({
+      id: m.slug,
       title: m.title,
-      thumb: m.thumb || m.thumbnail || m.image,
-      status: m.status || "",
+      thumb: m.cover,
       type: m.type || "Manga",
-      updated: m.updated_on || m.last_updated || "",
       chapter: m.chapter || "",
+      updated: m.date || "",
     })),
+    hasNext: d.hasNextPage || false,
+    currentPage: d.currentPage || page,
   };
 }
 
 async function mangaSearch(q) {
-  const r = await fetchT(`${MM_BASE}/search/${encodeURIComponent(q)}`, { headers: { "User-Agent": MM_UA } }, 12000);
+  const r = await fetchT(`${SK_BASE}/comic/bacakomik/search/${encodeURIComponent(q)}`, { headers: { "User-Agent": SK_UA } }, 12000);
   if (!r.ok) throw new Error("Gagal search.");
   const d = await r.json();
-  const list = d.manga_list || d.data || d || [];
   return {
-    list: list.map((m) => ({
-      id: m.endpoint || m.slug || m.id,
+    list: (d.komikList || []).map((m) => ({
+      id: m.slug,
       title: m.title,
-      thumb: m.thumb || m.thumbnail || m.image,
-      status: m.status || "",
+      thumb: m.cover,
       type: m.type || "Manga",
-      updated: m.updated_on || m.last_updated || "",
-      chapter: m.chapter || "",
+      rating: m.rating || "",
     })),
+    hasNext: false,
+    currentPage: 1,
   };
 }
 
-async function mangaDetail(endpoint) {
-  const r = await fetchT(`${MM_BASE}/manga/detail/${encodeURIComponent(endpoint)}`, { headers: { "User-Agent": MM_UA } }, 12000);
+async function mangaDetail(slug) {
+  const r = await fetchT(`${SK_BASE}/comic/bacakomik/detail/${encodeURIComponent(slug)}`, { headers: { "User-Agent": SK_UA } }, 12000);
   if (!r.ok) throw new Error("Gagal load detail.");
   const d = await r.json();
+  if (!d.success || !d.detail) throw new Error("Komik tidak ditemukan.");
+
+  const det = d.detail;
+
   const info = {
-    id: endpoint,
-    title: d.title,
-    thumb: d.thumb || d.thumbnail,
-    status: d.status || "",
-    type: d.type || "Manga",
-    author: d.author || "",
-    artist: d.artist || "",
-    rating: d.rating || "",
-    views: d.views || "",
-    desc: d.synopsis || d.description || "",
-    genres: (d.genre_list || d.genres || []).map((g) => g.genre_name || g.name || g),
+    id: slug,
+    title: det.title || "",
+    thumb: det.cover || "",
+    status: det.status || "",
+    type: det.type || "Manga",
+    author: det.author || "",
+    artist: det.artist || "",
+    rating: det.rating || "",
+    release: det.release || "",
+    series: det.series || "",
+    reader: det.reader || "",
+    otherTitle: det.otherTitle || "",
+    desc: det.synopsis || "",
+    genres: (det.genres || []).map((g) => g.title || ""),
   };
-  const chapters = (d.chapter_list || d.chapters || []).map((c) => ({
-    id: c.chapter_endpoint || c.endpoint || c.id,
-    title: c.chapter_title || c.title || "",
-    date: c.chapter_date || c.date || "",
+
+  const chapters = (det.chapters || []).map((c) => ({
+    id: c.slug,
+    title: c.title || "",
+    date: c.date || "",
   }));
+
   return { info, chapters };
 }
 
-async function mangaChapter(endpoint) {
-  const r = await fetchT(`${MM_BASE}/chapter/${encodeURIComponent(endpoint)}`, { headers: { "User-Agent": MM_UA } }, 15000);
+async function mangaChapter(slug) {
+  const r = await fetchT(`${SK_BASE}/comic/bacakomik/chapter/${encodeURIComponent(slug)}`, { headers: { "User-Agent": SK_UA } }, 15000);
   if (!r.ok) throw new Error("Gagal load chapter.");
   const d = await r.json();
-  const images = (d.image_path || d.images || []).map((img) => {
-    if (img.startsWith("http")) return img;
-    return `https://cdn.kaedenoki.net${img.startsWith("/") ? img : "/" + img}`;
-  });
+  if (!d.success) throw new Error("Chapter tidak ditemukan.");
+
   return {
-    images,
-    pages: images.length,
-    title: d.chapter_title || d.title || "",
+    images: (d.images || []).map((img) => typeof img === "string" ? img : (img.url || "")),
+    pages: (d.images || []).length,
+    title: d.title || "",
     nav: {
-      prev: d.prev_chapter_endpoint || "",
-      next: d.next_chapter_endpoint || "",
+      prev: d.navigation?.prev || "",
+      next: d.navigation?.next || "",
     },
   };
 }
