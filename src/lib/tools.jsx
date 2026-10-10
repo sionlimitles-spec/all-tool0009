@@ -22,7 +22,7 @@ export const copy = async (t) => {
 };
 const fmt = (n) => !n ? "0" : n > 1e6 ? (n / 1e6).toFixed(1) + "M" : n > 1e3 ? (n / 1e3).toFixed(1) + "K" : String(n);
 
-/* FORCE DOWNLOAD — pakai anchor tag langsung, tidak buka tab baru */
+/* FORCE DOWNLOAD */
 async function forceDownload(targetUrl, filename, key, setState, onToast) {
   if (!targetUrl) { onToast?.("URL tidak tersedia", "error"); return; }
   setState((s) => ({ ...s, [key]: 0 }));
@@ -30,7 +30,6 @@ async function forceDownload(targetUrl, filename, key, setState, onToast) {
   let res = null;
   let usedDirect = false;
 
-  // STEP 1: Coba fetch langsung dari browser (tidak ada timeout 10 detik)
   try {
     res = await fetch(targetUrl, { mode: "cors", credentials: "omit" });
     if (!res.ok) {
@@ -47,19 +46,17 @@ async function forceDownload(targetUrl, filename, key, setState, onToast) {
     res = null;
   }
 
-  // STEP 2: Kalau direct gagal, coba lewat proxy
   if (!res) {
     try {
       const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}&dl=1&name=${encodeURIComponent(filename)}`;
       res = await fetch(proxyUrl);
     } catch {
-      onToast?.("Gagal akses server. Coba lagi 1-2 menit.", "error");
+      onToast?.("Gagal akses server. Coba lagi.", "error");
       setState((s) => { const n = { ...s }; delete n[key]; return n; });
       return;
     }
   }
 
-  // STEP 3: Verifikasi response
   if (!res.ok) {
     onToast?.(`Server error (${res.status}). Coba lagi 1-2 menit.`, "error");
     setState((s) => { const n = { ...s }; delete n[key]; return n; });
@@ -68,12 +65,11 @@ async function forceDownload(targetUrl, filename, key, setState, onToast) {
 
   const ct = (res.headers.get("content-type") || "").toLowerCase();
   if (ct.includes("text/html") || ct.includes("application/json")) {
-    onToast?.("Server kirim error, bukan video. Coba lagi atau pakai video lain.", "error");
+    onToast?.("Server kirim error, bukan file. Coba lagi.", "error");
     setState((s) => { const n = { ...s }; delete n[key]; return n; });
     return;
   }
 
-  // STEP 4: Download file
   try {
     const total = Number(res.headers.get("content-length")) || 0;
     const reader = res.body.getReader();
@@ -93,15 +89,6 @@ async function forceDownload(targetUrl, filename, key, setState, onToast) {
     }
 
     const blob = new Blob(chunks, { type: ct || "video/mp4" });
-
-    // Cek: kalau file < 10KB dan tipenya HTML, itu error page
-    if (blob.size < 10240 && ct.includes("html")) {
-      onToast?.("File error, coba lagi.", "error");
-      setState((s) => { const n = { ...s }; delete n[key]; return n; });
-      return;
-    }
-
-    // Cek: kalau file < 1KB, itu pasti error
     if (blob.size < 1024) {
       onToast?.(`File terlalu kecil (${blob.size} bytes). Kemungkinan error.`, "error");
       setState((s) => { const n = { ...s }; delete n[key]; return n; });
@@ -120,7 +107,7 @@ async function forceDownload(targetUrl, filename, key, setState, onToast) {
     setTimeout(() => URL.revokeObjectURL(url2), 5000);
 
     setState((s) => ({ ...s, [key]: 100 }));
-    onToast?.(`${filename} berhasil diunduh`, "success");
+    onToast?.(`${filename} berhasil diunduh${usedDirect ? "" : " (via server)"}`, "success");
     setTimeout(() => setState((s) => { const n = { ...s }; delete n[key]; return n; }), 1500);
   } catch (e) {
     onToast?.(`Gagal unduh: ${e.message}`, "error");
@@ -977,7 +964,7 @@ export function TikTokDownloader({ onToast }) {
   );
 }
 
-/* ============ YOUTUBE DOWNLOADER ============ */
+/* ============ YOUTUBE DOWNLOADER (Invidious) ============ */
 export function YouTubeDownloader({ onToast }) {
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState("video");
@@ -994,14 +981,8 @@ export function YouTubeDownloader({ onToast }) {
     try {
       const res = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "youtube", url, mode, quality }) });
       const d = await res.json();
-      if (!res.ok) {
-        setE(d.error || "Gagal ambil video.");
-        if (d.videoId) setFb(d.videoId);
-        onToast?.(d.error || "Gagal", "error");
-      } else {
-        setR(d);
-        onToast?.("Video siap. Klik tombol download.", "success");
-      }
+      if (!res.ok) { setE(d.error || "Gagal ambil video."); if (d.videoId) setFb(d.videoId); onToast?.(d.error || "Gagal", "error"); }
+      else { setR(d); onToast?.("Video siap. Klik tombol download.", "success"); }
     } catch { setE("Kesalahan jaringan."); }
     setLoading(false);
   };
@@ -1048,6 +1029,73 @@ export function YouTubeDownloader({ onToast }) {
             </button>
             <a className="btn btn-s" href={r.downloadUrl} target="_blank" rel="noopener"><I.ExternalLink size={14} />Buka Manual</a>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ MEDIA DOWNLOADER (btch multi-platform) ============ */
+export function MediaDownloader({ onToast }) {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [r, setR] = useState(null);
+  const [e, setE] = useState("");
+  const [dlState, setDlState] = useState({});
+
+  const go = async () => {
+    if (!url) return;
+    setLoading(true); setE(""); setR(null); setDlState({});
+    try {
+      const res = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "media", url }) });
+      const d = await res.json();
+      if (!res.ok) { setE(d.error || "Gagal ambil media"); onToast?.(d.error || "Gagal", "error"); }
+      else { setR(d); onToast?.(`Media ${d.platform} siap`, "success"); }
+    } catch { setE("Kesalahan jaringan."); }
+    setLoading(false);
+  };
+
+  const platforms = [
+    { name: "TikTok", icon: "Music" }, { name: "YouTube", icon: "Youtube" },
+    { name: "Instagram", icon: "Instagram" }, { name: "Facebook", icon: "Facebook" },
+    { name: "X", icon: "Twitter" }, { name: "Pinterest", icon: "Image" },
+    { name: "Reddit", icon: "MessageCircle" },
+  ];
+
+  return (
+    <div className="col">
+      <div className="card">
+        <div className="tag" style={{ marginBottom: 10 }}>URL VIDEO / MEDIA</div>
+        <div className="row">
+          <input className="inp" style={{ flex: 1, minWidth: 200 }} value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} placeholder="Paste URL dari platform apa saja..." />
+          <button className="btn btn-p" disabled={loading || !url} onClick={go} style={{ minWidth: 120 }}>
+            {loading ? <I.Loader2 size={16} className="spin" /> : <I.Search size={16} />}
+            {loading ? "Proses..." : "Ambil Media"}
+          </button>
+        </div>
+        <div className="row" style={{ marginTop: 12 }}>
+          {platforms.map((p) => {
+            const C = I[p.icon] || I.Globe;
+            return (
+              <div key={p.name} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", background: "var(--ps)", borderRadius: 20, fontSize: 11, color: "var(--p)", fontWeight: 600 }}>
+                <C size={12} />{p.name}
+              </div>
+            );
+          })}
+        </div>
+        {e && <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{e}</div>}
+      </div>
+      {r && (
+        <div className="card fade">
+          <div className="tag" style={{ marginBottom: 10 }}>PLATFORM: {(r.platform || "").toUpperCase()}</div>
+          {r.thumbnail && <img src={r.thumbnail} style={{ width: "100%", borderRadius: 14, maxHeight: 300, objectFit: "cover" }} alt="Preview" />}
+          <div style={{ fontWeight: 700, marginTop: 12 }}>{r.title}</div>
+          {r.downloadUrl && (
+            <button className="btn btn-p" style={{ marginTop: 14, width: "100%" }} disabled={dlState.dl != null && dlState.dl < 100}
+              onClick={() => forceDownload(r.downloadUrl, `${(r.title || "media").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}.mp4`, "dl", setDlState, onToast)}>
+              {dlState.dl != null && dlState.dl < 100 ? <><I.Loader2 size={14} className="spin" />{dlState.dl}%</> : <><I.Download size={14} />Download Media</>}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -1137,7 +1185,7 @@ export function TempMail({ onToast }) {
       if (!r.ok || d.error) { setErr(d.error || "Gagal"); onToast?.(d.error || "Gagal", "error"); }
       else {
         setMailbox(d); setMsgs([]); setDetail(null); setNewCount(0);
-        localStorage.setItem("alltool-mail-v10", JSON.stringify({ ...d, ts: Date.now() }));
+        localStorage.setItem("alltool-mail-v12", JSON.stringify({ ...d, ts: Date.now() }));
         onToast?.("Email siap", "success");
       }
     } catch { setErr("Kesalahan jaringan"); onToast?.("Kesalahan jaringan", "error"); }
@@ -1185,7 +1233,7 @@ export function TempMail({ onToast }) {
   };
 
   useEffect(() => {
-    const s = localStorage.getItem("alltool-mail-v10");
+    const s = localStorage.getItem("alltool-mail-v12");
     if (s) {
       try {
         const mb = JSON.parse(s);
@@ -1283,7 +1331,7 @@ export function TempMail({ onToast }) {
   );
 }
 
-/* ============ KOMIK READER (MangaDex) ============ */
+/* ============ KOMIK READER (MangaDex fixed) ============ */
 export function KomikReader({ onToast }) {
   const [mode, setMode] = useState("home");
   const [mangaList, setMangaList] = useState([]);
@@ -1352,7 +1400,7 @@ export function KomikReader({ onToast }) {
         {loading && <div className="card" style={{ textAlign: "center", padding: 40 }}><I.Loader2 size={32} className="spin" style={{ color: "var(--p)" }} /></div>}
         <div className="manga-pages">
           {chapter.images?.map((img, i) => (
-            <img key={i} src={img} alt={`page-${i + 1}`} loading="lazy" style={{ width: "100%", maxWidth: 800, display: "block", margin: "0 auto" }} />
+            <img key={i} src={img} alt={`page-${i + 1}`} loading="lazy" referrerPolicy="no-referrer" style={{ width: "100%", maxWidth: 800, display: "block", margin: "0 auto" }} />
           ))}
         </div>
       </div>
@@ -1367,7 +1415,7 @@ export function KomikReader({ onToast }) {
         <button className="btn btn-g" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("home"); setDetail(null); }}><I.ArrowLeft size={16} />Kembali</button>
         <div className="card">
           <div className="row" style={{ gap: 16, alignItems: "flex-start" }}>
-            <img src={info.thumb} style={{ width: 120, borderRadius: 12, flexShrink: 0 }} alt={info.title} />
+            <img src={info.thumb} style={{ width: 120, borderRadius: 12, flexShrink: 0 }} alt={info.title} referrerPolicy="no-referrer" />
             <div style={{ flex: 1, minWidth: 0 }}>
               <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6, lineHeight: 1.3 }}>{info.title}</h2>
               {info.altTitle && <div className="mut" style={{ fontSize: 11, marginBottom: 6 }}>{info.altTitle}</div>}
@@ -1415,7 +1463,7 @@ export function KomikReader({ onToast }) {
       <div className="manga-grid">
         {mangaList.map((m) => (
           <div key={m.id} className="manga-card" onClick={() => openDetail(m.id)}>
-            {m.thumb && <img src={m.thumb} alt={m.title} loading="lazy" />}
+            {m.thumb && <img src={m.thumb} alt={m.title} loading="lazy" referrerPolicy="no-referrer" />}
             <div className="manga-info">{m.title}</div>
           </div>
         ))}
@@ -1886,4 +1934,4 @@ export function IpLookup({ onToast }) {
       </div>}
     </div>
   );
-                 }
+                          }
