@@ -144,14 +144,37 @@ async function inboxTempMail(token) {
   if (!r.ok) return [];
   const d = await r.json();
   if (d.expired) return [];
-  return (d.emails || []).map((m) => ({
-    id: String(m.id || m.date),
-    from: { address: m.from, name: m.from },
-    subject: m.subject || "(Tanpa subjek)",
-    intro: m.subject || "(Tanpa subjek)",
-    createdAt: m.date ? new Date(m.date).toISOString() : new Date().toISOString(),
-    seen: false,
-  }));
+  return (d.emails || []).map((m) => {
+    let text = m.body || m.text || "";
+    const html = m.html || "";
+    if (!text && html) {
+      text = String(html)
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/p>/gi, "\n\n")
+        .replace(/<\/div>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
+    return {
+      id: String(m.id || m.date),
+      from: { address: m.from, name: m.from },
+      subject: m.subject || "(Tanpa subjek)",
+      intro: text.slice(0, 100) || m.subject || "",
+      text: text || "(Tidak ada isi teks)",
+      html: html ? [html] : [],
+      createdAt: m.date ? new Date(m.date).toISOString() : new Date().toISOString(),
+      seen: false,
+    };
+  });
 }
 
 async function readTempMail(token, id) {
