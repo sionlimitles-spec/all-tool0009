@@ -45,79 +45,66 @@ async function tiktokDownload(url) {
   return null;
 }
 
-/* ============ YOUTUBE ============ */
+/* ============ YOUTUBE (Invidious + Fallback) ============ */
 function extractYtId(url) {
   const m = String(url || "").match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
   return m ? m[1] : null;
 }
 
-const SAVENOW_KEY = process.env.SAVENOW_API_KEY || "";
-const SAVENOW_BASE = "https://p.savenow.to/api/v2/download";
+const INVIDIOUS_INSTANCES = [
+  "https://inv.nadeko.net",
+  "https://invidious.nerdvpn.de",
+  "https://yewtu.be",
+  "https://invidious.snopyta.org",
+];
 
 async function youtubeDownload(url, mode = "video", quality = "1080") {
   const vid = extractYtId(url);
   if (!vid) return { error: "URL YouTube tidak valid." };
-
-  const cleanUrl = `https://www.youtube.com/watch?v=${vid}`;
   const thumb = `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`;
 
-  // ===== SAVENOW (kalau ada API key) =====
-  if (SAVENOW_KEY) {
+  // ===== INVIDIOUS (gratis, tanpa key) =====
+  for (const inst of INVIDIOUS_INSTANCES) {
     try {
-      const format = mode === "audio" ? "mp3" : "mp4";
-      const startUrl = `${SAVENOW_BASE}?format=${format}&url=${encodeURIComponent(cleanUrl)}&apikey=${SAVENOW_KEY}`;
+      const r = await fetchT(`${inst}/api/v1/videos/${vid}`, { headers: { "User-Agent": UA } }, 15000);
+      if (!r.ok) continue;
+      const d = await r.json();
+      if (d.error) continue;
 
-      const r = await fetchT(startUrl, { headers: { "User-Agent": UA } }, 20000);
-      if (!r.ok) throw new Error(`Savenow HTTP ${r.status}`);
+      const title = d.title || `YouTube ${vid}`;
+      const streams = mode === "audio" 
+        ? (d.adaptiveFormats || []).filter((f) => f.type?.startsWith("audio"))
+        : (d.formatStreams || []).concat(d.adaptiveFormats || []).filter((f) => f.type?.startsWith("video"));
 
-      const first = await r.json();
-
-      if (first.success === 1 || first.success === true) {
-        const dlUrl = first.download_url || first.downloadUrl || first.url;
-        if (dlUrl) {
-          return {
-            videoId: vid,
-            downloadUrl: dlUrl,
-            title: first.title || first.name || `YouTube ${vid}`,
-            thumbnail: first.thumbnail || first.thumb || thumb,
-            mode, quality,
-          };
+      if (streams.length > 0) {
+        // Pilih kualitas terbaik
+        let picked = streams[0];
+        if (mode === "video") {
+          const qNum = parseInt(quality);
+          const matching = streams.filter((f) => {
+            const h = f.resolution || f.qualityLabel || "";
+            return h.includes(`${qNum}p`) || h.includes(`${qNum}`);
+          });
+          if (matching.length > 0) picked = matching[0];
+        } else {
+          picked = streams.find((f) => f.bitrate > 100000) || streams[0];
         }
+
+        const downloadUrl = picked.url?.startsWith("http") ? picked.url : `${inst}${picked.url}`;
+        return {
+          videoId: vid,
+          downloadUrl,
+          title,
+          thumbnail: thumb,
+          mode, quality,
+        };
       }
-
-      const checkUrl = first.check_url || first.checkUrl || first.status_url || first.progress_url;
-      if (checkUrl) {
-        for (let i = 0; i < 20; i++) {
-          await new Promise((res) => setTimeout(res, 2500));
-          const pr = await fetchT(checkUrl, { headers: { "User-Agent": UA } }, 10000);
-          if (!pr.ok) continue;
-          const pd = await pr.json();
-          const progress = pd.progress || pd.percentage || 0;
-
-          if (progress >= 1000 || pd.success === 1 || pd.success === true) {
-            const dlUrl = pd.download_url || pd.downloadUrl || pd.url;
-            if (dlUrl) {
-              return {
-                videoId: vid,
-                downloadUrl: dlUrl,
-                title: pd.title || pd.name || `YouTube ${vid}`,
-                thumbnail: pd.thumbnail || pd.thumb || thumb,
-                mode, quality,
-              };
-            }
-          }
-        }
-      }
-
-      throw new Error("Timeout menunggu Savenow.");
-    } catch (e) {
-      console.warn("[Savenow]", e.message);
-    }
+    } catch { continue; }
   }
 
-  // ===== FALLBACK 1: btch-downloader =====
+  // ===== FALLBACK: btch-downloader =====
   try {
-    const r = await fetchT(`https://btch-downloader-api-green.vercel.app/api/download/aio?url=${encodeURIComponent(cleanUrl)}`, {}, 15000);
+    const r = await fetchT(`https://btch-downloader-api-green.vercel.app/api/download/aio?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`)}`, {}, 15000);
     if (r.ok) {
       const d = await r.json();
       const media = d.result || d.data || d;
@@ -128,14 +115,14 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
     }
   } catch {}
 
-  // ===== FALLBACK 2: cobalt =====
+  // ===== FALLBACK: cobalt =====
   const cobaltInstances = ["https://cobalt-api.kwiatekmiki.com/api/json", "https://api.cobalt.tools/api/json"];
   for (const inst of cobaltInstances) {
     try {
       const r = await fetchT(inst, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ url: cleanUrl, vQuality: quality, isAudioOnly: mode === "audio" }),
+        body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${vid}`, vQuality: quality, isAudioOnly: mode === "audio" }),
       }, 12000);
       if (r.ok) {
         const d = await r.json();
@@ -149,16 +136,47 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
   return { error: "Semua server YouTube sedang down. Coba lagi 1-2 menit.", videoId: vid, thumbnail: thumb };
 }
 
-/* ============ MEDIA DOWNLOADER ============ */
+/* ============ MEDIA DOWNLOADER (btch multi-platform) ============ */
 async function mediaDownload(url) {
+  // TikTok
   if (/tiktok\.com|vt\.tiktok|vm\.tiktok/i.test(url)) {
     const d = await tiktokDownload(url);
     if (d) return { platform: "tiktok", downloadUrl: d.hd || d.noWm, title: d.title, thumbnail: d.cover };
   }
+
+  // YouTube
   if (/youtube\.com|youtu\.be/i.test(url)) {
     const d = await youtubeDownload(url, "video", "1080");
     if (!d.error) return { platform: "youtube", downloadUrl: d.downloadUrl, title: d.title, thumbnail: d.thumbnail };
   }
+
+  // btch-downloader untuk platform lain (IG, FB, X, Pinterest, dll)
+  try {
+    const r = await fetchT(`https://btch-downloader-api-green.vercel.app/api/download/aio?url=${encodeURIComponent(url)}`, {}, 18000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.success || d.status === "success" || d.result) {
+        const media = d.result || d.data || d;
+        const downloadUrl = media.mp4 || media.video || media.url || media.download || 
+          (media.medias && media.medias[0]?.url) || 
+          (media.links && media.links[0]?.url) ||
+          (media.urls && media.urls[0]?.url);
+        if (downloadUrl) {
+          const platform = d.platform || detectPlatform(url);
+          return {
+            platform: platform,
+            downloadUrl,
+            title: media.title || media.caption || `${platform} media`,
+            thumbnail: media.thumbnail || media.cover || media.image || "",
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[btch]", e.message);
+  }
+
+  // Cobalt fallback
   const cobaltInstances = ["https://cobalt-api.kwiatekmiki.com/api/json", "https://api.cobalt.tools/api/json", "https://co.wuk.sh/api/json"];
   for (const inst of cobaltInstances) {
     try {
@@ -173,7 +191,17 @@ async function mediaDownload(url) {
       }
     } catch { continue; }
   }
+
   throw new Error("Platform tidak didukung atau video private.");
+}
+
+function detectPlatform(url) {
+  if (/instagram\.com/i.test(url)) return "instagram";
+  if (/facebook\.com|fb\.watch/i.test(url)) return "facebook";
+  if (/twitter\.com|x\.com/i.test(url)) return "twitter";
+  if (/pinterest\.com/i.test(url)) return "pinterest";
+  if (/reddit\.com/i.test(url)) return "reddit";
+  return "media";
 }
 
 /* ============ TEMP MAIL ============ */
@@ -224,7 +252,29 @@ async function inboxTempMail(token) {
 /* ============ PROXY ============ */
 async function proxyStream(targetUrl, request, forceDownload = false, customName = "") {
   const rangeHeader = request.headers.get("range") || "";
-  const headers = { "User-Agent": UA, Referer: targetUrl, Accept: "*/*" };
+  const headers = { "User-Agent": UA, Accept: "*/*" };
+
+  // Referer handling khusus per domain
+  try {
+    const host = new URL(targetUrl).hostname;
+    if (host.includes("mangadex.org") || host.includes("mangadex.network")) {
+      // MangaDex: hotlink protection return gambar salah kalau Referer ada. 
+      // Referer kosong = return gambar asli
+      headers.Referer = "";
+    } else if (host.includes("youtube") || host.includes("googlevideo")) {
+      headers.Referer = "https://www.youtube.com/";
+      headers.Origin = "https://www.youtube.com";
+    } else if (host.includes("tiktok")) {
+      headers.Referer = "https://www.tiktok.com/";
+    } else if (host.includes("instagram") || host.includes("cdninstagram")) {
+      headers.Referer = "https://www.instagram.com/";
+    } else {
+      headers.Referer = targetUrl;
+    }
+  } catch {
+    headers.Referer = "";
+  }
+
   if (rangeHeader) headers.Range = rangeHeader;
 
   const r = await fetchT(targetUrl, { headers }, 45000);
@@ -248,11 +298,14 @@ async function proxyStream(targetUrl, request, forceDownload = false, customName
     }
     filename = filename.replace(/[^\w\s.-]/g, "_").slice(0, 100);
     outHeaders.set("Content-Disposition", `attachment; filename="${filename}"`);
+    outHeaders.set("Cache-Control", "no-store");
+  } else {
+    // Gambar: cache 1 hari
+    outHeaders.set("Cache-Control", "public, max-age=86400, s-maxage=86400");
   }
 
   outHeaders.set("Accept-Ranges", "bytes");
   outHeaders.set("Access-Control-Allow-Origin", "*");
-  outHeaders.set("Cache-Control", "no-store");
 
   return new Response(r.body, { status: r.status, headers: outHeaders });
 }
@@ -299,14 +352,15 @@ async function aiChat(messages, model, provider, apiKey) {
   throw new Error("Provider tidak dikenal: " + provider);
 }
 
-/* ============ MANGA (MangaDex) ============ */
+/* ============ MANGA (MangaDex dengan proxy gambar) ============ */
 const MD_BASE = "https://api.mangadex.org";
-const MD_UA = "AllTool/10.0 (contact: alltool@example.com)";
+const MD_UA = "AllTool/11.0 (contact: alltool@example.com)";
 
 function getCoverUrl(manga) {
   const coverRel = (manga.relationships || []).find((r) => r.type === "cover_art");
   if (coverRel && coverRel.attributes?.fileName) {
-    return `https://uploads.mangadex.org/covers/${manga.id}/${coverRel.attributes.fileName}.256.jpg`;
+    const directUrl = `https://uploads.mangadex.org/covers/${manga.id}/${coverRel.attributes.fileName}.256.jpg`;
+    return `/api/proxy?url=${encodeURIComponent(directUrl)}`;
   }
   return "";
 }
@@ -385,8 +439,8 @@ async function mangaChapter(chapterId) {
   const { hash, data, dataSaver } = d.chapter;
   const baseUrl = d.baseUrl;
   return {
-    images: (data || []).map((f) => `${baseUrl}/data/${hash}/${f}`),
-    imagesSaver: (dataSaver || []).map((f) => `${baseUrl}/data-saver/${hash}/${f}`),
+    images: (data || []).map((f) => `/api/proxy?url=${encodeURIComponent(`${baseUrl}/data/${hash}/${f}`)}`),
+    imagesSaver: (dataSaver || []).map((f) => `/api/proxy?url=${encodeURIComponent(`${baseUrl}/data-saver/${hash}/${f}`)}`),
     pages: (data || []).length,
   };
 }
@@ -503,5 +557,5 @@ export async function GET(req) {
     try { return await proxyStream(proxyUrl, req, forceDl, customName); }
     catch (e) { return Response.json({ error: e.message }, { status: 500 }); }
   }
-  return Response.json({ ok: true, service: "AllTool API", version: "11.1" });
-            }
+  return Response.json({ ok: true, service: "AllTool API", version: "12.0" });
+}
