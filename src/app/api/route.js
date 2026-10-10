@@ -19,7 +19,6 @@ async function fetchT(url, opts = {}, ms = 12000) {
 
 /* ============ TIKTOK ============ */
 async function tiktokDownload(url) {
-  // Server 1: tikwm.com (paling stabil)
   try {
     const r = await fetchT(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`, {
       headers: { "User-Agent": UA },
@@ -47,34 +46,8 @@ async function tiktokDownload(url) {
       }
     }
   } catch (e) {
-    console.warn("[TikTok tikwm]", e.message);
+    console.warn("[TikTok]", e.message);
   }
-
-  // Server 2: tiklydown
-  try {
-    const r = await fetchT(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`, {
-      headers: { "User-Agent": UA },
-    }, 10000);
-    if (r.ok) {
-      const d = await r.json();
-      if (d.video || d.data?.video) {
-        const v = d.data || d;
-        return {
-          title: v.title || "tiktok-video",
-          author: v.author?.unique_id || "",
-          cover: v.cover || v.thumbnail,
-          video: v.video?.noWatermark || v.video?.playAddr || v.video,
-          noWm: v.video?.noWatermark || v.video?.playAddr || v.video,
-          music: v.music?.playUrl || v.music,
-          duration: v.duration || 0,
-          stats: { plays: 0, likes: 0, comments: 0, shares: 0 },
-        };
-      }
-    }
-  } catch (e) {
-    console.warn("[TikTok tiklydown]", e.message);
-  }
-
   return null;
 }
 
@@ -90,45 +63,34 @@ async function youtubeDownload(url, mode = "video") {
 
   const cleanUrl = `https://www.youtube.com/watch?v=${vid}`;
 
-  // Server 1: cobalt.tools API v10 (format baru)
   try {
-    const r = await fetchT("https://api.cobalt.tools/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        url: cleanUrl,
-        videoQuality: mode === "audio" ? "360" : "720",
-        audioFormat: "mp3",
-        downloadMode: mode === "audio" ? "audio" : "video",
-      }),
-    }, 12000);
+    const r = await fetchT(`https://btch-downloader-api-green.vercel.app/api/download/aio?url=${encodeURIComponent(cleanUrl)}`, {}, 15000);
     if (r.ok) {
       const d = await r.json();
-      if (d.status === "tunnel" || d.status === "redirect") {
+      const media = d.result || d.data || d;
+      const downloadUrl =
+        media.mp4 || media.video || media.url ||
+        (media.medias && media.medias[0]?.url) ||
+        (media.links && media.links[0]?.url);
+
+      if (downloadUrl) {
         return {
           videoId: vid,
-          downloadUrl: d.url,
-          title: d.filename || `YouTube ${vid}`,
-          thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
+          downloadUrl,
+          title: media.title || `YouTube ${vid}`,
+          thumbnail: media.thumbnail || `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
           mode,
         };
       }
     }
   } catch (e) {
-    console.warn("[YouTube cobalt v10]", e.message);
+    console.warn("[YouTube btch]", e.message);
   }
 
-  // Server 2: cobalt lama (v7 endpoint)
   try {
-    const r = await fetchT("https://api.cobalt.tools/api/json", {
+    const r = await fetchT("https://cobalt-api.kwiatekmiki.com/api/json", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
         url: cleanUrl,
         vQuality: mode === "audio" ? "128" : "720",
@@ -141,102 +103,70 @@ async function youtubeDownload(url, mode = "video") {
         return {
           videoId: vid,
           downloadUrl: d.url,
-          title: `YouTube ${vid}`,
+          title: d.filename || `YouTube ${vid}`,
           thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
           mode,
         };
       }
     }
   } catch (e) {
-    console.warn("[YouTube cobalt v7]", e.message);
-  }
-
-  // Server 3: cobalt instance alternatif
-  try {
-    const r = await fetchT("https://co.wuk.sh/api/json", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        url: cleanUrl,
-        vQuality: "720",
-        isAudioOnly: false,
-      }),
-    }, 12000);
-    if (r.ok) {
-      const d = await r.json();
-      if (d.url) {
-        return {
-          videoId: vid,
-          downloadUrl: d.url,
-          title: `YouTube ${vid}`,
-          thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
-          mode,
-        };
-      }
-    }
-  } catch (e) {
-    console.warn("[YouTube wuk]", e.message);
+    console.warn("[YouTube cobalt]", e.message);
   }
 
   return {
-    error: "Server downloader YouTube sedang down. Coba lagi 1-2 menit.",
+    error: "Server YouTube downloader sedang down. Coba lagi 1-2 menit.",
     videoId: vid,
     thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
   };
 }
 
-/* ============ TEMP MAIL (1secmail - paling stabil) ============ */
-let tmCached = null;
-let tmCachedAt = 0;
-
+/* ============ TEMP MAIL ============ */
 async function createTempMail() {
-  const r = await fetchT("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1", {}, 8000);
-  if (!r.ok) throw new Error("Server 1secmail tidak tersedia.");
-  const arr = await r.json();
-  if (!Array.isArray(arr) || !arr[0]) throw new Error("Gagal generate email.");
+  const r = await fetchT("https://api.tempmail.lol/v2/inbox/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  }, 10000);
 
-  const [login, domain] = arr[0].split("@");
-  const result = {
-    email: arr[0],
-    login,
-    domain,
-    provider: "1secmail",
-    expiresAt: Date.now() + 7200000,
+  if (!r.ok) throw new Error("Gagal membuat email sementara.");
+  const d = await r.json();
+  return {
+    email: d.address,
+    token: d.token,
+    provider: "tempmail.lol",
+    expiresAt: Date.now() + 3600000,
   };
-  tmCached = result;
-  tmCachedAt = Date.now();
-  return result;
 }
 
-async function inbox1sec(login, domain) {
-  const r = await fetchT(`https://www.1secmail.com/api/v1/?action=getMessages&login=${encodeURIComponent(login)}&domain=${encodeURIComponent(domain)}`, {}, 10000);
-  if (!r.ok) throw new Error("Gagal ambil inbox.");
-  const j = await r.json();
-  if (!Array.isArray(j)) return [];
-
-  return j.map((m) => ({
-    id: String(m.id),
+async function inboxTempMail(token) {
+  if (!token) return [];
+  const r = await fetchT(`https://api.tempmail.lol/v2/inbox?token=${encodeURIComponent(token)}`, {}, 10000);
+  if (!r.ok) return [];
+  const d = await r.json();
+  if (d.expired) return [];
+  return (d.emails || []).map((m) => ({
+    id: String(m.id || m.date),
     from: { address: m.from, name: m.from },
     subject: m.subject || "(Tanpa subjek)",
     intro: m.subject || "(Tanpa subjek)",
-    createdAt: m.date,
+    createdAt: new Date(m.date).toISOString(),
     seen: false,
   }));
 }
 
-async function read1sec(login, domain, id) {
-  const r = await fetchT(`https://www.1secmail.com/api/v1/?action=readMessage&login=${encodeURIComponent(login)}&domain=${encodeURIComponent(domain)}&id=${id}`, {}, 10000);
-  if (!r.ok) throw new Error("Gagal baca pesan.");
+async function readTempMail(token, id) {
+  const r = await fetchT(`https://api.tempmail.lol/v2/inbox?token=${encodeURIComponent(token)}`, {}, 10000);
+  if (!r.ok) throw new Error("Gagal membaca inbox.");
   const d = await r.json();
+  if (d.expired) throw new Error("Inbox sudah kedaluwarsa.");
+  const email = (d.emails || []).find((e) => String(e.id || e.date) === String(id));
+  if (!email) throw new Error("Email tidak ditemukan.");
   return {
-    subject: d.subject || "(Tanpa subjek)",
-    from: { address: d.from, name: d.from },
-    text: d.textBody || d.body || "(Tidak ada isi teks)",
-    html: d.htmlBody ? [d.htmlBody] : [],
-    createdAt: d.date,
+    subject: email.subject || "(Tanpa subjek)",
+    from: { address: email.from, name: email.from },
+    text: email.body || "(Tidak ada isi teks)",
+    html: email.html ? [email.html] : [],
+    createdAt: new Date(email.date).toISOString(),
   };
 }
 
@@ -272,17 +202,13 @@ export async function POST(req) {
         return Response.json({ error: "URL TikTok tidak valid." }, { status: 400 });
       }
       const d = await tiktokDownload(body.url);
-      if (!d) {
-        return Response.json({ error: "Gagal ambil video. Pastikan video publik dan URL benar." }, { status: 400 });
-      }
+      if (!d) return Response.json({ error: "Gagal ambil video. Pastikan video publik." }, { status: 400 });
       return Response.json(d);
     }
 
     if (action === "youtube") {
       const d = await youtubeDownload(body.url, body.mode || "video");
-      if (d.error) {
-        return Response.json(d, { status: d.videoId ? 503 : 400 });
-      }
+      if (d.error) return Response.json(d, { status: d.videoId ? 503 : 400 });
       return Response.json(d);
     }
 
@@ -296,22 +222,18 @@ export async function POST(req) {
     }
 
     if (action === "tempmail-inbox") {
-      if (!body.login || !body.domain) return Response.json([]);
+      if (!body.token) return Response.json([]);
       try {
-        const msgs = await inbox1sec(body.login, body.domain);
-        return Response.json(msgs);
+        return Response.json(await inboxTempMail(body.token));
       } catch {
         return Response.json([]);
       }
     }
 
     if (action === "tempmail-read") {
-      if (!body.login || !body.domain || !body.id) {
-        return Response.json({ error: "Parameter kurang." }, { status: 400 });
-      }
+      if (!body.token || !body.id) return Response.json({ error: "Parameter kurang." }, { status: 400 });
       try {
-        const d = await read1sec(body.login, body.domain, body.id);
-        return Response.json(d);
+        return Response.json(await readTempMail(body.token, body.id));
       } catch (e) {
         return Response.json({ error: e.message }, { status: 500 });
       }
@@ -330,8 +252,7 @@ export async function POST(req) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: body.url, visibility: "public" }),
       }, 12000);
-      const d = await r.json();
-      return Response.json(d);
+      return Response.json(await r.json());
     }
 
     if (action === "scan-url-result") {
@@ -377,7 +298,7 @@ export async function GET(req) {
   return Response.json({
     ok: true,
     service: "AllTool API",
-    version: "6.0",
+    version: "7.0",
     endpoints: ["tiktok", "youtube", "tempmail-create", "tempmail-inbox", "tempmail-read", "ip-lookup", "scan-url", "scan-url-result", "scan-hash"],
   });
-    }
+      }
