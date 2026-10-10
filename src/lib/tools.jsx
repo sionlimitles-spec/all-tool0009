@@ -238,7 +238,7 @@ export function HtmlMinifier() {
       <div className="row">
         <button className="btn btn-p" onClick={min}>Minify HTML</button>
         {o && <button className="btn btn-s" onClick={() => copy(o)}>Copy</button>}
-        <span className="soft">{i.length} → {o.length} chars</span>
+        <span className="soft">{i.length} to {o.length} chars</span>
       </div>
       {o && <textarea className="txa" rows={10} value={o} readOnly />}
     </div>
@@ -500,7 +500,7 @@ export function Percentage() {
           <div><div className="tag" style={{ marginBottom: 6 }}>NILAI B</div><input type="number" className="inp" value={b} onChange={(e) => setB(+e.target.value)} /></div>
         </div>
       </div>
-      {[[`${a}% dari ${b}`, ((a / 100) * b).toFixed(2)], [`${a} berapa % dari ${b}`, ((a / b) * 100).toFixed(2) + "%"], [`Perubahan ${a} → ${b}`, (((b - a) / a) * 100).toFixed(2) + "%"]].map(([l, v]) => (
+      {[[`${a}% dari ${b}`, ((a / 100) * b).toFixed(2)], [`${a} berapa % dari ${b}`, ((a / b) * 100).toFixed(2) + "%"], [`Perubahan ${a} ke ${b}`, (((b - a) / a) * 100).toFixed(2) + "%"]].map(([l, v]) => (
         <div key={l} className="card"><div className="mut">{l}</div><div className="stat" style={{ marginTop: 6 }}>{v}</div></div>
       ))}
     </div>
@@ -651,7 +651,7 @@ export function PasswordStrength() {
   );
 }
 
-/* ============ VIRUS SCANNER v2 (Auto-Detect + File Upload) ============ */
+/* ============ VIRUS SCANNER v2 ============ */
 export function VirusScanner({ onToast }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -659,7 +659,6 @@ export function VirusScanner({ onToast }) {
   const [err, setErr] = useState("");
   const [pollCount, setPollCount] = useState(0);
   const [fileName, setFileName] = useState("");
-  const [scanKind, setScanKind] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
 
@@ -675,7 +674,6 @@ export function VirusScanner({ onToast }) {
   };
 
   const scanUrl = async (url) => {
-    setScanKind("url");
     try {
       const r = await fetch("/api", {
         method: "POST",
@@ -695,7 +693,6 @@ export function VirusScanner({ onToast }) {
   };
 
   const scanHash = async (hash) => {
-    setScanKind("hash");
     try {
       const r = await fetch("/api", {
         method: "POST",
@@ -742,7 +739,7 @@ export function VirusScanner({ onToast }) {
       setErr("Masukkan URL, hash, atau upload file terlebih dahulu.");
       return;
     }
-    setLoading(true); setErr(""); setResult(null); setPollCount(0); setScanKind("");
+    setLoading(true); setErr(""); setResult(null); setPollCount(0);
 
     const type = detectType(t);
     if (!type) {
@@ -785,7 +782,7 @@ export function VirusScanner({ onToast }) {
   };
 
   const reset = () => {
-    setInput(""); setResult(null); setErr(""); setFileName(""); setScanKind(""); setPollCount(0);
+    setInput(""); setResult(null); setErr(""); setFileName(""); setPollCount(0);
   };
 
   const detected = detectType(input);
@@ -864,9 +861,9 @@ export function VirusScanner({ onToast }) {
         )}
 
         <div className="soft" style={{ marginTop: 12, lineHeight: 1.6 }}>
-          <div><b>URL</b> → diperiksa via urlscan.io</div>
-          <div><b>Hash</b> → diperiksa via MalwareBazaar (abuse.ch)</div>
-          <div><b>File</b> → SHA-256 dihitung otomatis, lalu dicari di database</div>
+          <div><b>URL</b> diperiksa via urlscan.io</div>
+          <div><b>Hash</b> diperiksa via MalwareBazaar (abuse.ch)</div>
+          <div><b>File</b> SHA-256 dihitung otomatis, lalu dicari di database</div>
         </div>
 
         {err && (
@@ -1184,7 +1181,7 @@ export function YouTubeDownloader({ onToast }) {
   );
 }
 
-/* ============ TEMP MAIL v7 ============ */
+/* ============ TEMP MAIL v8 (merge + HTML fallback + delete) ============ */
 export function TempMail({ onToast }) {
   const [mailbox, setMailbox] = useState(null);
   const [msgs, setMsgs] = useState([]);
@@ -1195,6 +1192,7 @@ export function TempMail({ onToast }) {
   const [cooldown, setCooldown] = useState(0);
   const [lastRefresh, setLastRefresh] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [newCount, setNewCount] = useState(0);
 
   const create = useCallback(async () => {
     if (cooldown > 0 || loading) return;
@@ -1211,8 +1209,8 @@ export function TempMail({ onToast }) {
         setErr(d.error || "Gagal");
         onToast?.(d.error || "Gagal", "error");
       } else {
-        setMailbox(d); setMsgs([]); setDetail(null);
-        localStorage.setItem("alltool-mail-v7", JSON.stringify({ ...d, ts: Date.now() }));
+        setMailbox(d); setMsgs([]); setDetail(null); setNewCount(0);
+        localStorage.setItem("alltool-mail-v8", JSON.stringify({ ...d, ts: Date.now() }));
         onToast?.("Email sementara siap", "success");
       }
     } catch {
@@ -1238,11 +1236,30 @@ export function TempMail({ onToast }) {
         body: JSON.stringify({ action: "tempmail-inbox", token: mb.token }),
       });
       const d = await r.json();
-      setMsgs(Array.isArray(d) ? d : []);
+      const newMsgs = Array.isArray(d) ? d : [];
+
+      setMsgs((prev) => {
+        if (newMsgs.length === 0) return prev;
+        const map = new Map();
+        prev.forEach((m) => map.set(String(m.id), m));
+        let added = 0;
+        newMsgs.forEach((m) => {
+          if (!map.has(String(m.id))) added++;
+          map.set(String(m.id), m);
+        });
+        if (added > 0 && silent) {
+          setNewCount(added);
+          onToast?.(`${added} email baru masuk!`, "success");
+        }
+        const merged = Array.from(map.values());
+        merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        return merged;
+      });
+
       setLastRefresh(new Date());
     } catch {}
     if (!silent) setRefreshing(false);
-  }, []);
+  }, [onToast]);
 
   const open = async (id) => {
     if (!mailbox?.token) return;
@@ -1253,15 +1270,21 @@ export function TempMail({ onToast }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "tempmail-read", token: mailbox.token, id }),
       });
-      setDetail(await r.json());
-    } catch {
-      onToast?.("Gagal buka email", "error");
-    }
+      const d = await r.json();
+      if (d.error) onToast?.(d.error, "error");
+      else setDetail({ ...d, id });
+    } catch { onToast?.("Gagal buka email", "error"); }
     setLoading(false);
   };
 
+  const deleteMsg = (id) => {
+    setMsgs((prev) => prev.filter((m) => String(m.id) !== String(id)));
+    if (detail?.id === id) setDetail(null);
+    onToast?.("Pesan dihapus dari daftar", "info");
+  };
+
   useEffect(() => {
-    const s = localStorage.getItem("alltool-mail-v7");
+    const s = localStorage.getItem("alltool-mail-v8");
     if (s) {
       try {
         const mb = JSON.parse(s);
@@ -1276,6 +1299,11 @@ export function TempMail({ onToast }) {
     const i = setInterval(() => inbox(mailbox, true), 15000);
     return () => clearInterval(i);
   }, [mailbox, inbox, autoRefresh]);
+
+  const fmtTime = (s) => {
+    try { return new Date(s).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }); }
+    catch { return ""; }
+  };
 
   return (
     <div className="col">
@@ -1297,7 +1325,7 @@ export function TempMail({ onToast }) {
         {mailbox && (
           <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }}>
             <div className="soft">
-              Provider: <b style={{ color: "var(--p)" }}>tempmail.lol</b> • Auto-refresh 15s
+              Provider: <b style={{ color: "var(--p)" }}>tempmail.lol</b> • Auto 15s
               {lastRefresh && ` • ${lastRefresh.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
             </div>
             <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, color: "var(--mut)" }}>
@@ -1309,20 +1337,60 @@ export function TempMail({ onToast }) {
 
       {detail ? (
         <div className="card fade">
-          <button className="btn btn-g" onClick={() => setDetail(null)} style={{ marginBottom: 12 }}>
-            <I.ArrowLeft size={16} />Kembali
-          </button>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>{detail.subject || "(Tanpa subjek)"}</div>
-          <div className="mut" style={{ marginTop: 6 }}>Dari: {detail.from?.address}</div>
-          <div style={{ marginTop: 16, padding: 16, border: "1.5px solid var(--bd)", borderRadius: 12, fontSize: 13, whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.7 }}>
-            {detail.text || "(Tidak ada isi teks)"}
+          <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+            <button className="btn btn-g" onClick={() => setDetail(null)}>
+              <I.ArrowLeft size={16} />Kembali
+            </button>
+            <button className="btn btn-g" onClick={() => deleteMsg(detail.id)} style={{ color: "var(--red)" }}>
+              <I.Trash2 size={16} />Hapus
+            </button>
           </div>
+          <div style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.4 }}>{detail.subject || "(Tanpa subjek)"}</div>
+          <div className="mut" style={{ marginTop: 6 }}>
+            <b>Dari:</b> {detail.from?.address}
+          </div>
+          {detail.createdAt && <div className="soft" style={{ marginTop: 3 }}>{fmtTime(detail.createdAt)}</div>}
+
+          {detail.html && detail.html.length > 0 && detail.html[0] ? (
+            <div
+              style={{
+                marginTop: 16,
+                padding: 16,
+                border: "1.5px solid var(--bd)",
+                borderRadius: 12,
+                fontSize: 13,
+                lineHeight: 1.7,
+                background: "#fff",
+                color: "#0f172a",
+                overflowX: "auto",
+              }}
+              dangerouslySetInnerHTML={{ __html: detail.html[0] }}
+            />
+          ) : (
+            <div
+              style={{
+                marginTop: 16,
+                padding: 16,
+                border: "1.5px solid var(--bd)",
+                borderRadius: 12,
+                fontSize: 13,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                lineHeight: 1.7,
+              }}
+            >
+              {detail.text || "(Tidak ada isi pesan)"}
+            </div>
+          )}
         </div>
       ) : (
         <>
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <b style={{ fontSize: 16 }}>Kotak Masuk {msgs.length > 0 && `(${msgs.length})`}</b>
-            <button className="btn btn-s" disabled={refreshing} onClick={() => inbox(mailbox)}>
+            <div className="row" style={{ gap: 8 }}>
+              <b style={{ fontSize: 16 }}>Kotak Masuk {msgs.length > 0 && `(${msgs.length})`}</b>
+              {newCount > 0 && <span className="pill" style={{ background: "var(--green)", color: "#fff" }}>+{newCount} baru</span>}
+            </div>
+            <button className="btn btn-s" disabled={refreshing} onClick={() => { setNewCount(0); inbox(mailbox); }}>
               {refreshing ? <I.Loader2 size={14} className="spin" /> : <I.RefreshCw size={14} />}Refresh
             </button>
           </div>
@@ -1334,15 +1402,31 @@ export function TempMail({ onToast }) {
             </div>
           )}
           {msgs.map((m) => (
-            <button key={m.id} className="card card-int" style={{ textAlign: "left", width: "100%" }} onClick={() => open(m.id)}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.subject}</div>
-                  <div className="mut" style={{ marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.from?.address}</div>
+            <div key={m.id} className="card card-int" style={{ position: "relative" }}>
+              <button
+                onClick={() => open(m.id)}
+                style={{ textAlign: "left", width: "100%", background: "none", border: "none", padding: 0 }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: 24 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {m.subject}
+                    </div>
+                    <div className="mut" style={{ marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {m.from?.address}
+                    </div>
+                  </div>
+                  <div className="soft" style={{ flexShrink: 0, textAlign: "right" }}>{fmtTime(m.createdAt)}</div>
                 </div>
-                <div className="soft" style={{ flexShrink: 0 }}>{new Date(m.createdAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</div>
-              </div>
-            </button>
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); deleteMsg(m.id); }}
+                className="btn btn-g"
+                style={{ position: "absolute", top: 8, right: 8, padding: 6, color: "var(--red)" }}
+              >
+                <I.X size={14} />
+              </button>
+            </div>
           ))}
         </>
       )}
@@ -1800,4 +1884,4 @@ export function TextToSpeech() {
       </div>
     </div>
   );
-      }
+               }
