@@ -45,7 +45,12 @@ async function tiktokDownload(url) {
   return null;
 }
 
-/* ============ YOUTUBE (VidKraken via Zyla) ============ */
+/* ============ YOUTUBE ============ */
+function extractYtId(url) {
+  const m = String(url || "").match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
 const ZYLA_KEY = process.env.ZYLA_API_KEY || "";
 const ZYLA_BASE = "https://zylalabs.com/api/13741/youtube+downloader+reliable+api/31484";
 
@@ -53,56 +58,69 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
   const vid = extractYtId(url);
   if (!vid) return { error: "URL YouTube tidak valid." };
 
-  if (!ZYLA_KEY) {
-    return { error: "API key Zyla belum diatur. Tambahkan di Environment Variables Vercel.", videoId: vid, thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg` };
-  }
-
+  // Fallback gratis: btch-downloader + cobalt
   try {
-    // Step 1: Queue download job
-    const format = mode === "audio" ? "audio" : quality;
-    const r = await fetchT(`${ZYLA_BASE}/download+video+or+audio+using+vidkraken+reliable+api`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${ZYLA_KEY}`,
-      },
-      body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${vid}`, format }),
-    }, 20000);
-
-    if (!r.ok) {
-      const errText = await r.text();
-      throw new Error(`Zyla error (${r.status}): ${errText.slice(0, 150)}`);
-    }
-
-    const job = await r.json();
-    if (!job.pollUrl) throw new Error("Tidak ada pollUrl dari Zyla.");
-
-    // Step 2: Poll sampai COMPLETED (max 10 percobaan, jeda 2 detik)
-    for (let i = 0; i < 10; i++) {
-      await new Promise((res) => setTimeout(res, 2000));
-      const pr = await fetchT(job.pollUrl, {}, 10000);
-      if (!pr.ok) continue;
-      const pd = await pr.json();
-      if (pd.status === "COMPLETED" && pd.downloadUrl) {
-        return {
-          videoId: vid,
-          downloadUrl: pd.downloadUrl,
-          title: pd.title || `YouTube ${vid}`,
-          thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
-          mode,
-          quality,
-          fileSize: pd.fileSize || 0,
-        };
+    const r = await fetchT(`https://btch-downloader-api-green.vercel.app/api/download/aio?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`)}`, {}, 15000);
+    if (r.ok) {
+      const d = await r.json();
+      const media = d.result || d.data || d;
+      const downloadUrl = media.mp4 || media.video || media.url || (media.medias && media.medias[0]?.url) || (media.links && media.links[0]?.url);
+      if (downloadUrl) {
+        return { videoId: vid, downloadUrl, title: media.title || `YouTube ${vid}`, thumbnail: media.thumbnail || `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`, mode, quality };
       }
-      if (pd.status === "FAILED") throw new Error(pd.message || "Server gagal memproses video.");
     }
+  } catch {}
 
-    throw new Error("Timeout menunggu hasil. Coba lagi 30 detik.");
-  } catch (e) {
-    console.warn("[YouTube VidKraken]", e.message);
-    return { error: e.message, videoId: vid, thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg` };
+  const cobaltInstances = ["https://cobalt-api.kwiatekmiki.com/api/json", "https://api.cobalt.tools/api/json"];
+  for (const inst of cobaltInstances) {
+    try {
+      const r = await fetchT(inst, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${vid}`, vQuality: quality, isAudioOnly: mode === "audio" }),
+      }, 12000);
+      if (r.ok) {
+        const d = await r.json();
+        if (d.url) {
+          return { videoId: vid, downloadUrl: d.url, title: d.filename || `YouTube ${vid}`, thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`, mode, quality };
+        }
+      }
+    } catch { continue; }
   }
+
+  // Premium: VidKraken via Zyla (kalau ada API key)
+  if (ZYLA_KEY) {
+    try {
+      const format = mode === "audio" ? "audio" : quality;
+      const r = await fetchT(`${ZYLA_BASE}/download+video+or+audio+using+vidkraken+reliable+api`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${ZYLA_KEY}` },
+        body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${vid}`, format }),
+      }, 20000);
+
+      if (r.ok) {
+        const job = await r.json();
+        if (job.pollUrl) {
+          for (let i = 0; i < 10; i++) {
+            await new Promise((res) => setTimeout(res, 2000));
+            const pr = await fetchT(job.pollUrl, {}, 10000);
+            if (!pr.ok) continue;
+            const pd = await pr.json();
+            if (pd.status === "COMPLETED" && pd.downloadUrl) {
+              return { videoId: vid, downloadUrl: pd.downloadUrl, title: pd.title || `YouTube ${vid}`, thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`, mode, quality };
+            }
+            if (pd.status === "FAILED") break;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[YouTube VidKraken]", e.message);
+    }
+  }
+
+  return { error: "Server YouTube sedang down. Coba lagi 1-2 menit.", videoId: vid, thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg` };
 }
+
 /* ============ MEDIA DOWNLOADER ============ */
 async function mediaDownload(url) {
   if (/tiktok\.com|vt\.tiktok|vm\.tiktok/i.test(url)) {
@@ -175,7 +193,7 @@ async function inboxTempMail(token) {
   });
 }
 
-/* ============ PROXY (FIXED — Force download with custom filename) ============ */
+/* ============ PROXY ============ */
 async function proxyStream(targetUrl, request, forceDownload = false, customName = "") {
   const rangeHeader = request.headers.get("range") || "";
   const headers = { "User-Agent": UA, Referer: targetUrl, Accept: "*/*" };
@@ -218,7 +236,7 @@ async function aiChat(messages, model, provider, apiKey) {
   if (provider === "groq") {
     const r = await fetchT("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model, messages, max_tokens: 2048, temperature: 0.7 }),
     }, 45000);
     if (!r.ok) { const err = await r.text(); throw new Error(`Groq error (${r.status}): ${err.slice(0, 200)}`); }
@@ -242,7 +260,7 @@ async function aiChat(messages, model, provider, apiKey) {
   if (provider === "openrouter") {
     const r = await fetchT("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://alltool.vercel.app", "X-Title": "AllTool AI" },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://alltool.vercel.app", "X-Title": "AllTool AI" },
       body: JSON.stringify({ model, messages, max_tokens: 2048 }),
     }, 45000);
     if (!r.ok) { const err = await r.text(); throw new Error(`OpenRouter error (${r.status}): ${err.slice(0, 200)}`); }
@@ -457,5 +475,5 @@ export async function GET(req) {
     try { return await proxyStream(proxyUrl, req, forceDl, customName); }
     catch (e) { return Response.json({ error: e.message }, { status: 500 }); }
   }
-  return Response.json({ ok: true, service: "AllTool API", version: "10.1" });
-      }
+  return Response.json({ ok: true, service: "AllTool API", version: "11.0" });
+        }
