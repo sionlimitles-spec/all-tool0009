@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import * as I from "lucide-react";
 
 /* ============ UTILS ============ */
@@ -651,51 +651,71 @@ export function PasswordStrength() {
   );
 }
 
+/* ============ VIRUS SCANNER v2 (Auto-Detect + File Upload) ============ */
 export function VirusScanner({ onToast }) {
-  const [mode, setMode] = useState("url");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [err, setErr] = useState("");
   const [pollCount, setPollCount] = useState(0);
+  const [fileName, setFileName] = useState("");
+  const [scanKind, setScanKind] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef(null);
 
-  const scan = async () => {
-    if (!input) return;
-    setLoading(true); setErr(""); setResult(null); setPollCount(0);
-
-    if (mode === "url") {
-      try {
-        const r = await fetch("/api", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "scan-url", url: input }),
-        });
-        const d = await r.json();
-        if (d.error) { setErr(d.error); onToast?.(d.error, "error"); }
-        else {
-          setResult({ type: "url-pending", ...d });
-          onToast?.("Scan dimulai, tunggu ~15 detik...", "info");
-          pollResult(d.scanId, 0);
-        }
-      } catch (e) { setErr("Kesalahan jaringan"); }
-    } else {
-      try {
-        const r = await fetch("/api", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "scan-hash", hash: input.trim().toLowerCase() }),
-        });
-        const d = await r.json();
-        if (d.error) { setErr(d.error); onToast?.(d.error, "error"); }
-        else setResult({ type: "hash", ...d });
-      } catch { setErr("Kesalahan jaringan"); }
-    }
-    setLoading(false);
+  const detectType = (v) => {
+    if (!v) return null;
+    const t = v.trim();
+    if (/^https?:\/\/.+/i.test(t)) return "url";
+    if (/^[a-f0-9]{32}$/i.test(t)) return "hash-md5";
+    if (/^[a-f0-9]{40}$/i.test(t)) return "hash-sha1";
+    if (/^[a-f0-9]{64}$/i.test(t)) return "hash-sha256";
+    if (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(t)) return "url";
+    return null;
   };
 
-  const pollResult = async (id, attempt) => {
+  const scanUrl = async (url) => {
+    setScanKind("url");
+    try {
+      const r = await fetch("/api", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "scan-url", url }),
+      });
+      const d = await r.json();
+      if (d.error) {
+        setErr(d.error);
+        onToast?.(d.error, "error");
+      } else {
+        setResult({ type: "url-pending", ...d });
+        onToast?.("Menganalisis URL, tunggu ~15 detik...", "info");
+        pollUrl(d.scanId, 0);
+      }
+    } catch { setErr("Kesalahan jaringan"); }
+  };
+
+  const scanHash = async (hash) => {
+    setScanKind("hash");
+    try {
+      const r = await fetch("/api", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "scan-hash", hash: hash.toLowerCase() }),
+      });
+      const d = await r.json();
+      if (d.error) {
+        setErr(d.error);
+        onToast?.(d.error, "error");
+      } else {
+        setResult({ type: "hash", ...d });
+        onToast?.(d.malware ? "File berbahaya terdeteksi!" : "File aman", d.malware ? "error" : "success");
+      }
+    } catch { setErr("Kesalahan jaringan"); }
+  };
+
+  const pollUrl = async (id, attempt) => {
     if (attempt > 8) {
-      setErr("Timeout menunggu hasil. Coba cek manual di urlscan.io");
+      setErr("Timeout. Cek manual di urlscan.io");
       return;
     }
     setPollCount(attempt + 1);
@@ -708,52 +728,159 @@ export function VirusScanner({ onToast }) {
       });
       const d = await r.json();
       if (d.error || !d.verdicts) {
-        pollResult(id, attempt + 1);
+        pollUrl(id, attempt + 1);
       } else {
         setResult({ type: "url-result", ...d, scanId: id });
         onToast?.(d.malicious ? "URL berbahaya terdeteksi!" : "URL aman", d.malicious ? "error" : "success");
       }
-    } catch { pollResult(id, attempt + 1); }
+    } catch { pollUrl(id, attempt + 1); }
   };
+
+  const startScan = async () => {
+    const t = input.trim();
+    if (!t) {
+      setErr("Masukkan URL, hash, atau upload file terlebih dahulu.");
+      return;
+    }
+    setLoading(true); setErr(""); setResult(null); setPollCount(0); setScanKind("");
+
+    const type = detectType(t);
+    if (!type) {
+      setErr("Input tidak dikenali. Masukkan URL (https://...), hash (32/40/64 karakter hex), atau upload file.");
+      setLoading(false);
+      return;
+    }
+
+    if (type === "url") {
+      let url = t;
+      if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+      await scanUrl(url);
+    } else {
+      await scanHash(t);
+    }
+    setLoading(false);
+  };
+
+  const handleFile = async (f) => {
+    if (!f) return;
+    if (f.size > 50 * 1024 * 1024) {
+      onToast?.("File terlalu besar (maks 50 MB)", "error");
+      return;
+    }
+    setFileName(f.name);
+    setErr(""); setResult(null); setLoading(true);
+    onToast?.(`Menghitung hash ${f.name}...`, "info");
+
+    try {
+      const buf = await f.arrayBuffer();
+      const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+      const hash = Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      setInput(hash);
+      onToast?.("Hash SHA-256 siap. Scan otomatis...", "info");
+      await scanHash(hash);
+    } catch (e) {
+      setErr("Gagal membaca file: " + e.message);
+    }
+    setLoading(false);
+  };
+
+  const reset = () => {
+    setInput(""); setResult(null); setErr(""); setFileName(""); setScanKind(""); setPollCount(0);
+  };
+
+  const detected = detectType(input);
+  const detectedLabel = {
+    url: "URL",
+    "hash-md5": "Hash MD5",
+    "hash-sha1": "Hash SHA-1",
+    "hash-sha256": "Hash SHA-256",
+  }[detected] || null;
 
   return (
     <div className="col">
       <div className="card">
-        <div className="row" style={{ marginBottom: 10 }}>
-          <button className={`chip ${mode === "url" ? "active" : ""}`} onClick={() => setMode("url")}>
-            <I.Globe size={12} />Scan URL
-          </button>
-          <button className={`chip ${mode === "hash" ? "active" : ""}`} onClick={() => setMode("hash")}>
-            <I.FileSearch size={12} />Scan File Hash
-          </button>
-        </div>
+        <div className="tag" style={{ marginBottom: 12 }}>SCAN OTOMATIS</div>
+        <p className="mut" style={{ marginBottom: 14, lineHeight: 1.6 }}>
+          Masukkan URL atau hash, atau upload file. Sistem otomatis mendeteksi dan scan.
+        </p>
 
-        <div className="row">
+        <div className="row" style={{ marginBottom: 10 }}>
           <input
             className="inp"
             style={{ flex: 1, minWidth: 200, fontFamily: "monospace", fontSize: 13 }}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={mode === "url" ? "https://situs-mencurigakan.com" : "SHA-256 hash file"}
+            onChange={(e) => { setInput(e.target.value); setErr(""); }}
+            onKeyDown={(e) => e.key === "Enter" && startScan()}
+            placeholder="https://situs.com  atau  hash SHA-256"
           />
-          <button className="btn btn-p" disabled={loading || !input} onClick={scan}>
+          <button className="btn btn-p" disabled={loading || !input} onClick={startScan}>
             {loading ? <I.Loader2 size={14} className="spin" /> : <I.ShieldAlert size={14} />}
             {loading ? "Scanning..." : "Scan"}
           </button>
         </div>
 
-        <div className="soft" style={{ marginTop: 10 }}>
-          {mode === "url" ? "URL diperiksa via urlscan.io. Tidak butuh API key." : "Hash diperiksa via MalwareBazaar (abuse.ch). Gratis."}
+        {detectedLabel && !loading && (
+          <div className="row" style={{ marginBottom: 10 }}>
+            <span className="pill">
+              <I.Check size={11} />Terdeteksi: {detectedLabel}
+            </span>
+          </div>
+        )}
+
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault(); setDragOver(false);
+            if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]);
+          }}
+          onClick={() => fileRef.current?.click()}
+          style={{
+            border: `2px dashed ${dragOver ? "var(--p)" : "var(--bd-strong)"}`,
+            borderRadius: 14,
+            padding: 24,
+            textAlign: "center",
+            cursor: "pointer",
+            background: dragOver ? "var(--ps)" : "transparent",
+            transition: "all 0.2s",
+          }}
+        >
+          <I.Upload size={26} style={{ color: "var(--p)", margin: "0 auto 8px" }} />
+          <div style={{ fontWeight: 700, fontSize: 13 }}>Upload file untuk scan</div>
+          <div className="soft" style={{ marginTop: 4 }}>Klik atau drag file ke sini (maks 50 MB)</div>
+          {fileName && <div className="mut" style={{ marginTop: 8 }}>File: {fileName}</div>}
+          <input
+            ref={fileRef}
+            type="file"
+            style={{ display: "none" }}
+            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+          />
         </div>
 
-        {err && <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{err}</div>}
+        {input && !loading && (
+          <button className="btn btn-g" style={{ marginTop: 12, fontSize: 12 }} onClick={reset}>
+            <I.X size={12} />Reset
+          </button>
+        )}
+
+        <div className="soft" style={{ marginTop: 12, lineHeight: 1.6 }}>
+          <div><b>URL</b> → diperiksa via urlscan.io</div>
+          <div><b>Hash</b> → diperiksa via MalwareBazaar (abuse.ch)</div>
+          <div><b>File</b> → SHA-256 dihitung otomatis, lalu dicari di database</div>
+        </div>
+
+        {err && (
+          <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>
+            {err}
+          </div>
+        )}
       </div>
 
       {result?.type === "url-pending" && (
         <div className="card" style={{ textAlign: "center", padding: 30 }}>
           <I.Loader2 size={32} className="spin" style={{ color: "var(--p)", margin: "0 auto 12px" }} />
-          <div style={{ fontWeight: 700 }}>Sedang menganalisis URL...</div>
-          <div className="mut" style={{ marginTop: 6 }}>Percobaan ke-{pollCount}/8. Estimasi 15-30 detik.</div>
+          <div style={{ fontWeight: 700 }}>Menganalisis URL...</div>
+          <div className="mut" style={{ marginTop: 6 }}>Percobaan {pollCount}/8 · Estimasi 15-30 detik</div>
         </div>
       )}
 
@@ -802,7 +929,7 @@ export function VirusScanner({ onToast }) {
       {result?.type === "hash" && (
         <div className="card fade">
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
-            <b style={{ fontSize: 16 }}>Hasil Scan Hash</b>
+            <b style={{ fontSize: 16 }}>Hasil Scan File</b>
             <span
               className="pill"
               style={{
@@ -813,6 +940,12 @@ export function VirusScanner({ onToast }) {
               {result.malware ? "MALWARE" : "BERSIH"}
             </span>
           </div>
+          {fileName && (
+            <div className="row" style={{ marginBottom: 10 }}>
+              <I.File size={14} style={{ color: "var(--p)" }} />
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{fileName}</span>
+            </div>
+          )}
           {result.found ? (
             <div className="col">
               {[
@@ -829,8 +962,17 @@ export function VirusScanner({ onToast }) {
               ))}
             </div>
           ) : (
-            <p className="mut">{result.message || "Hash tidak ditemukan di database. Kemungkinan aman, tapi bisa jadi belum pernah tercatat."}</p>
+            <div style={{ textAlign: "center", padding: 20 }}>
+              <I.CheckCircle2 size={44} style={{ color: "var(--green)", margin: "0 auto 10px" }} />
+              <div style={{ fontWeight: 700, fontSize: 14 }}>File bersih</div>
+              <div className="mut" style={{ marginTop: 6 }}>
+                {result.message || "Hash tidak ditemukan di database malware."}
+              </div>
+            </div>
           )}
+          <div className="soft" style={{ marginTop: 14, wordBreak: "break-all", fontFamily: "monospace", fontSize: 10 }}>
+            Hash: {input}
+          </div>
         </div>
       )}
     </div>
@@ -1042,7 +1184,7 @@ export function YouTubeDownloader({ onToast }) {
   );
 }
 
-/* ============ TEMP MAIL v7 (tempmail.lol) ============ */
+/* ============ TEMP MAIL v7 ============ */
 export function TempMail({ onToast }) {
   const [mailbox, setMailbox] = useState(null);
   const [msgs, setMsgs] = useState([]);
@@ -1314,13 +1456,13 @@ Project ini dibuat otomatis oleh AllTool APK Compiler.
 
 ### Metode 1: Android Studio (Lokal)
 1. Buka folder ini di Android Studio
-2. Klik Build -> Build APK(s)
+2. Klik Build, lalu Build APK(s)
 3. APK tersedia di app/build/outputs/apk/debug/
 
 ### Metode 2: GitHub Actions (Online, Gratis)
 1. Upload folder ini ke GitHub
 2. File workflow .github/workflows/build.yml sudah disertakan
-3. Push -> otomatis build APK
+3. Push, otomatis build APK
 4. Download APK dari tab Actions / Artifacts
 
 ## Info
@@ -1470,9 +1612,9 @@ jobs:
 
   const methods = [
     { id: "pwabuilder", name: "PWABuilder", desc: "Microsoft. Kualitas terbaik. Untuk web app modern.", iconName: "Building2" },
-    { id: "appsgeyser", name: "AppsGeyser", desc: "Paling simpel. Input URL -> APK dalam 2 menit.", iconName: "Zap" },
+    { id: "appsgeyser", name: "AppsGeyser", desc: "Paling simpel. Input URL, dapat APK dalam 2 menit.", iconName: "Zap" },
     { id: "webintoapp", name: "WebIntoApp", desc: "Cepat. Support HTML upload juga.", iconName: "Rocket" },
-    { id: "manual", name: "Build Manual (ZIP)", desc: "Download source Android project. Build via Android Studio / GitHub Actions.", iconName: "Terminal" },
+    { id: "manual", name: "Build Manual (ZIP)", desc: "Download source Android project. Build via Android Studio atau GitHub Actions.", iconName: "Terminal" },
   ];
 
   const renderIcon = (iconName, size) => {
@@ -1551,8 +1693,8 @@ jobs:
             <div className="tag" style={{ marginBottom: 8 }}>CARA BUILD APK DARI PROJECT INI</div>
             <ol style={{ fontSize: 13, lineHeight: 1.9, paddingLeft: 20 }}>
               <li>Extract ZIP yang Anda download</li>
-              <li><b>Metode A - Android Studio:</b> Buka folder di Android Studio -> Build -> Build APK</li>
-              <li><b>Metode B - GitHub Actions (gratis):</b> Upload project ke GitHub -> workflow sudah disertakan -> APK otomatis ter-build -> download dari Actions tab</li>
+              <li><b>Metode A - Android Studio:</b> Buka folder di Android Studio, klik Build, lalu pilih Build APK</li>
+              <li><b>Metode B - GitHub Actions (gratis):</b> Upload project ke GitHub, workflow sudah disertakan, APK otomatis ter-build, download dari Actions tab</li>
             </ol>
           </div>
         </>
