@@ -3,6 +3,6 @@
 @tailwind utilities;
 
 body {
-  background-color: #09090b; /* Warna background gelap (zinc-950) */
+  background-color: #09090b;
   color: #fafafa;
 }
