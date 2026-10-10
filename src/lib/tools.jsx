@@ -1347,7 +1347,7 @@ export function KomikReader({ onToast }) {
       const d = await r.json();
       if (d.error) setErr(d.error);
       else setMangaList(d.list || []);
-    } catch { setErr("Gagal load manga."); }
+    } catch { setErr("Gagal load komik."); }
     setLoading(false);
   };
 
@@ -1364,7 +1364,7 @@ export function KomikReader({ onToast }) {
   };
 
   const openDetail = async (id) => {
-    setLoading(true); setErr(""); setMode("detail");
+    setLoading(true); setErr(""); setMode("detail"); setDetail(null);
     try {
       const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-detail", id }) });
       const d = await r.json();
@@ -1375,7 +1375,7 @@ export function KomikReader({ onToast }) {
   };
 
   const openChapter = async (id) => {
-    setLoading(true); setErr(""); setMode("reader");
+    setLoading(true); setErr(""); setMode("reader"); setChapter(null);
     try {
       const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-chapter", id }) });
       const d = await r.json();
@@ -1387,8 +1387,8 @@ export function KomikReader({ onToast }) {
 
   useEffect(() => { loadPopular(1); }, []);
 
-  /* READER MODE */
-  if (mode === "reader" && chapter) {
+  /* READER */
+  if (mode === "reader") {
     return (
       <div className="col">
         <div className="card" style={{ position: "sticky", top: 70, zIndex: 10, padding: 12 }}>
@@ -1396,116 +1396,178 @@ export function KomikReader({ onToast }) {
             <button className="btn btn-g" onClick={() => { setMode("detail"); setChapter(null); }}>
               <I.ArrowLeft size={16} />Kembali
             </button>
-            <div className="soft">{chapter.pages} halaman</div>
+            {chapter && <div className="soft" style={{ fontSize: 12 }}>{chapter.title} · {chapter.pages} halaman</div>}
           </div>
         </div>
+
         {loading && (
-          <div className="card" style={{ textAlign: "center", padding: 40 }}>
-            <I.Loader2 size={32} className="spin" style={{ color: "var(--p)", margin: "0 auto" }} />
+          <div className="card" style={{ textAlign: "center", padding: 60 }}>
+            <I.Loader2 size={36} className="spin" style={{ color: "var(--p)", margin: "0 auto" }} />
             <div className="mut" style={{ marginTop: 12 }}>Memuat halaman...</div>
           </div>
         )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-          {chapter.images?.map((img, i) => (
-            <img key={i} src={img} alt={`page-${i + 1}`} loading="lazy" referrerPolicy="no-referrer" style={{ width: "100%", maxWidth: 800, display: "block", margin: "0 auto", background: "#000" }} />
-          ))}
-        </div>
-        {chapter.nav && (chapter.nav.prev || chapter.nav.next) && (
-          <div className="row" style={{ justifyContent: "space-between", marginTop: 16 }}>
-            {chapter.nav.prev ? (
-              <button className="btn btn-s" onClick={() => openChapter(chapter.nav.prev)}>
-                <I.ArrowLeft size={14} />Sebelumnya
-              </button>
-            ) : <div />}
-            {chapter.nav.next ? (
-              <button className="btn btn-p" onClick={() => openChapter(chapter.nav.next)}>
-                Selanjutnya<I.ArrowRight size={14} />
-              </button>
-            ) : <div />}
+
+        {err && !loading && (
+          <div className="card" style={{ color: "var(--red)", textAlign: "center", padding: 30 }}>
+            <I.AlertCircle size={36} style={{ margin: "0 auto 10px", opacity: 0.5 }} />
+            <div>{err}</div>
+            <button className="btn btn-s" style={{ marginTop: 12 }} onClick={() => setMode("detail")}>Kembali</button>
+          </div>
+        )}
+
+        {chapter && chapter.images && chapter.images.length > 0 && (
+          <>
+            <div style={{ background: "#000", borderRadius: 14, overflow: "hidden" }}>
+              {chapter.images.map((img, i) => (
+                <img key={i} src={img} alt={`page-${i + 1}`} loading="lazy" referrerPolicy="no-referrer" style={{ width: "100%", maxWidth: 800, display: "block", margin: "0 auto" }} />
+              ))}
+            </div>
+            {(chapter.nav.prev || chapter.nav.next) && (
+              <div className="row" style={{ justifyContent: "space-between", marginTop: 16 }}>
+                {chapter.nav.prev ? (
+                  <button className="btn btn-s" onClick={() => openChapter(chapter.nav.prev)}>
+                    <I.ArrowLeft size={14} />Sebelumnya
+                  </button>
+                ) : <div />}
+                {chapter.nav.next ? (
+                  <button className="btn btn-p" onClick={() => openChapter(chapter.nav.next)}>
+                    Selanjutnya<I.ArrowRight size={14} />
+                  </button>
+                ) : <div />}
+              </div>
+            )}
+          </>
+        )}
+
+        {chapter && (!chapter.images || chapter.images.length === 0) && !loading && !err && (
+          <div className="card" style={{ textAlign: "center", padding: 40 }}>
+            <div className="mut">Gambar chapter tidak tersedia</div>
           </div>
         )}
       </div>
     );
   }
 
-  /* DETAIL MODE */
-  if (mode === "detail" && detail) {
-    const info = detail.info;
-    const chapters = detail.chapters || [];
-    return (
-      <div className="col">
-        <button className="btn btn-g" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("home"); setDetail(null); }}>
-          <I.ArrowLeft size={16} />Kembali
-        </button>
+  /* DETAIL */
+  if (mode === "detail") {
+    if (loading && !detail) {
+      return (
+        <div className="col">
+          <button className="btn btn-g" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("home"); setDetail(null); }}>
+            <I.ArrowLeft size={16} />Kembali
+          </button>
+          <div className="card" style={{ textAlign: "center", padding: 60 }}>
+            <I.Loader2 size={36} className="spin" style={{ color: "var(--p)", margin: "0 auto" }} />
+            <div className="mut" style={{ marginTop: 12 }}>Memuat detail...</div>
+          </div>
+        </div>
+      );
+    }
 
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ position: "relative", minHeight: 220 }}>
-            {info.thumb && (
-              <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
-                <img src={info.thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", filter: "blur(30px) brightness(0.4)", transform: "scale(1.2)" }} referrerPolicy="no-referrer" />
-              </div>
-            )}
-            <div style={{ position: "relative", display: "flex", gap: 16, padding: 20 }}>
-              <img src={info.thumb} alt={info.title} referrerPolicy="no-referrer" style={{ width: 120, height: 170, objectFit: "cover", borderRadius: 12, boxShadow: "0 20px 40px rgba(0,0,0,0.5)", flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0, color: "#fff" }}>
-                <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 8, lineHeight: 1.3 }}>{info.title}</h2>
-                <div className="row" style={{ marginBottom: 8 }}>
-                  {info.type && <span className="pill" style={{ fontSize: 10 }}>{info.type}</span>}
-                  {info.status && <span className="pill" style={{ fontSize: 10 }}>{info.status}</span>}
+    if (err && !detail) {
+      return (
+        <div className="col">
+          <button className="btn btn-g" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("home"); setDetail(null); }}>
+            <I.ArrowLeft size={16} />Kembali
+          </button>
+          <div className="card" style={{ color: "var(--red)", textAlign: "center", padding: 30 }}>
+            <I.AlertCircle size={36} style={{ margin: "0 auto 10px", opacity: 0.5 }} />
+            <div>{err}</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (detail) {
+      const info = detail.info;
+      const chapters = detail.chapters || [];
+      return (
+        <div className="col">
+          <button className="btn btn-g" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("home"); setDetail(null); }}>
+            <I.ArrowLeft size={16} />Kembali
+          </button>
+
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ position: "relative", minHeight: 220 }}>
+              {info.thumb && (
+                <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+                  <img src={info.thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", filter: "blur(30px) brightness(0.35)", transform: "scale(1.2)" }} referrerPolicy="no-referrer" />
                 </div>
-                {info.rating && (
-                  <div className="row" style={{ gap: 6, marginBottom: 6, fontSize: 13, color: "#fff" }}>
-                    <I.Star size={14} fill="#fbbf24" color="#fbbf24" />
-                    <b>{info.rating}</b>
+              )}
+              <div style={{ position: "relative", display: "flex", gap: 16, padding: 20 }}>
+                <img src={info.thumb} alt={info.title} referrerPolicy="no-referrer" style={{ width: 120, height: 170, objectFit: "cover", borderRadius: 12, boxShadow: "0 20px 40px rgba(0,0,0,0.5)", flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0, color: "#fff" }}>
+                  <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 8, lineHeight: 1.3 }}>{info.title}</h2>
+                  <div className="row" style={{ marginBottom: 8 }}>
+                    {info.type && <span className="pill" style={{ fontSize: 10 }}>{info.type}</span>}
+                    {info.status && <span className="pill" style={{ fontSize: 10 }}>{info.status}</span>}
                   </div>
-                )}
-                {info.author && (
-                  <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
-                    <I.User size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />
-                    {info.author}
-                  </div>
-                )}
+                  {info.rating && (
+                    <div className="row" style={{ gap: 6, marginBottom: 6, fontSize: 13, color: "#fff" }}>
+                      <I.Star size={14} fill="#fbbf24" color="#fbbf24" />
+                      <b>{info.rating}</b>
+                      {info.reader && <span style={{ opacity: 0.7, marginLeft: 8, fontSize: 11 }}>• {info.reader}</span>}
+                    </div>
+                  )}
+                  {info.author && (
+                    <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>
+                      <I.User size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />
+                      {info.author}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-          <div style={{ padding: 20 }}>
-            {info.genres && info.genres.length > 0 && (
-              <>
-                <div className="tag" style={{ marginBottom: 8 }}>GENRE</div>
-                <div className="row" style={{ marginBottom: 16 }}>
-                  {info.genres.map((g, i) => (
-                    <span key={i} style={{ fontSize: 11, padding: "4px 10px", background: "var(--ps)", borderRadius: 12, color: "var(--p)", fontWeight: 600 }}>{g}</span>
-                  ))}
-                </div>
-              </>
-            )}
-            <div className="tag" style={{ marginBottom: 8 }}>SINOPSIS</div>
-            <div className="mut" style={{ fontSize: 13, lineHeight: 1.7 }}>{info.desc || "Tidak ada sinopsis."}</div>
-          </div>
-        </div>
 
-        <div className="card">
-          <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
-            <div className="tag">{chapters.length} CHAPTER</div>
+            <div style={{ padding: 20 }}>
+              {info.otherTitle && (
+                <div className="mut" style={{ fontSize: 11, marginBottom: 12, fontStyle: "italic" }}>{info.otherTitle}</div>
+              )}
+              {info.genres && info.genres.length > 0 && (
+                <>
+                  <div className="tag" style={{ marginBottom: 8 }}>GENRE</div>
+                  <div className="row" style={{ marginBottom: 16 }}>
+                    {info.genres.map((g, i) => (
+                      <span key={i} style={{ fontSize: 11, padding: "4px 10px", background: "var(--ps)", borderRadius: 12, color: "var(--p)", fontWeight: 600 }}>{g}</span>
+                    ))}
+                  </div>
+                </>
+              )}
+              {info.desc && (
+                <>
+                  <div className="tag" style={{ marginBottom: 8 }}>SINOPSIS</div>
+                  <div className="mut" style={{ fontSize: 13, lineHeight: 1.7 }}>{info.desc}</div>
+                </>
+              )}
+            </div>
           </div>
-          <div style={{ maxHeight: 500, overflowY: "auto" }}>
-            {chapters.map((c, i) => (
-              <button key={c.id || i} onClick={() => openChapter(c.id)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: "1px solid var(--border)", textAlign: "left", background: "transparent", gap: 8 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || `Chapter ${i + 1}`}</div>
-                  {c.date && <div className="soft" style={{ marginTop: 3 }}>{c.date}</div>}
-                </div>
-                <I.ChevronRight size={16} style={{ color: "var(--p)", flexShrink: 0 }} />
-              </button>
-            ))}
-            {chapters.length === 0 && (<div className="mut" style={{ textAlign: "center", padding: 30 }}>Belum ada chapter</div>)}
+
+          <div className="card">
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+              <div className="tag">{chapters.length} CHAPTER</div>
+              <div className="soft" style={{ fontSize: 10 }}>Terbaru di atas</div>
+            </div>
+            <div style={{ maxHeight: 500, overflowY: "auto" }}>
+              {chapters.map((c, i) => (
+                <button key={c.id || i} onClick={() => openChapter(c.id)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: "1px solid var(--border)", textAlign: "left", background: "transparent", gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {c.title || c.id.split("-").pop()?.replace(/^chapter-/i, "Chapter ") || `Chapter ${i + 1}`}
+                    </div>
+                    {c.date && <div className="soft" style={{ marginTop: 3 }}>{c.date}</div>}
+                  </div>
+                  <I.ChevronRight size={16} style={{ color: "var(--p)", flexShrink: 0 }} />
+                </button>
+              ))}
+              {chapters.length === 0 && (<div className="mut" style={{ textAlign: "center", padding: 30 }}>Belum ada chapter</div>)}
+            </div>
           </div>
         </div>
-      </div>
-    );
+      );
+    }
   }
 
-  /* HOME MODE */
+  /* HOME */
   return (
     <div className="col">
       <div className="card">
@@ -1546,13 +1608,18 @@ export function KomikReader({ onToast }) {
                     </div>
                   )}
                   {m.type && (
-                    <div style={{ position: "absolute", top: 8, left: 8, padding: "3px 8px", borderRadius: 6, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 9, fontWeight: 700 }}>
+                    <div style={{ position: "absolute", top: 8, left: 8, padding: "3px 8px", borderRadius: 6, background: "rgba(0,0,0,0.75)", color: "#fff", fontSize: 9, fontWeight: 700, letterSpacing: "0.04em" }}>
                       {m.type.toUpperCase()}
                     </div>
                   )}
                   {m.chapter && (
                     <div style={{ position: "absolute", bottom: 8, right: 8, padding: "3px 8px", borderRadius: 6, background: "var(--p)", color: "#fff", fontSize: 9, fontWeight: 700 }}>
                       {m.chapter}
+                    </div>
+                  )}
+                  {m.rating && (
+                    <div style={{ position: "absolute", bottom: 8, left: 8, padding: "3px 8px", borderRadius: 6, background: "rgba(251,191,36,0.95)", color: "#000", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}>
+                      <I.Star size={9} fill="#000" />{m.rating}
                     </div>
                   )}
                 </div>
@@ -1566,15 +1633,17 @@ export function KomikReader({ onToast }) {
             ))}
           </div>
 
-          <div className="row" style={{ justifyContent: "center", marginTop: 20 }}>
-            <button className="btn btn-s" disabled={page <= 1 || loading} onClick={() => loadPopular(page - 1)}>
-              <I.ArrowLeft size={14} />Sebelumnya
-            </button>
-            <div className="pill">Halaman {page}</div>
-            <button className="btn btn-p" disabled={loading} onClick={() => loadPopular(page + 1)}>
-              Selanjutnya<I.ArrowRight size={14} />
-            </button>
-          </div>
+          {!search && (
+            <div className="row" style={{ justifyContent: "center", marginTop: 20 }}>
+              <button className="btn btn-s" disabled={page <= 1 || loading} onClick={() => loadPopular(page - 1)}>
+                <I.ArrowLeft size={14} />Sebelumnya
+              </button>
+              <div className="pill">Halaman {page}</div>
+              <button className="btn btn-p" disabled={loading} onClick={() => loadPopular(page + 1)}>
+                Selanjutnya<I.ArrowRight size={14} />
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -1586,8 +1655,7 @@ export function KomikReader({ onToast }) {
       )}
     </div>
   );
-}
-
+}          
 /* ============ AI CHAT ============ */
 export function AIChat({ onToast }) {
   const [messages, setMessages] = useState([]);
