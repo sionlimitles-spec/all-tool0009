@@ -2,18 +2,19 @@ import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const action = searchParams.get('action'); // 'search' atau 'chapter'
+  const action = searchParams.get('action');
   const query = searchParams.get('query');
   const endpoint = searchParams.get('endpoint');
 
-  let url = '';
   const baseUrl = 'https://komiku-api.fly.dev/api/comic';
+  let url = '';
 
+  // Menentukan URL tujuan berdasarkan action
   if (action === 'search') {
-    // Contoh: /api/comic?action=search&query=one punch
     url = `${baseUrl}/search/${encodeURIComponent(query || '')}`;
+  } else if (action === 'info') {
+    url = `${baseUrl}/info${endpoint}`;
   } else if (action === 'chapter') {
-    // Contoh: /api/comic?action=chapter&endpoint=/ch/hack-g-u-chapter-1/
     url = `${baseUrl}/chapter${endpoint}`;
   } else {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
@@ -22,10 +23,9 @@ export async function GET(request: Request) {
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // Tambahkan timeout jika perlu, misal 10 detik
+      headers: { 'Content-Type': 'application/json' },
+      // Timeout 15 detik agar tidak menggantung
+      signal: AbortSignal.timeout(15000) 
     });
 
     if (!response.ok) {
