@@ -42,9 +42,7 @@ async function forceDownload(targetUrl, filename, key, setState, onToast) {
         usedDirect = true;
       }
     }
-  } catch {
-    res = null;
-  }
+  } catch { res = null; }
 
   if (!res) {
     try {
@@ -90,7 +88,7 @@ async function forceDownload(targetUrl, filename, key, setState, onToast) {
 
     const blob = new Blob(chunks, { type: ct || "video/mp4" });
     if (blob.size < 1024) {
-      onToast?.(`File terlalu kecil (${blob.size} bytes). Kemungkinan error.`, "error");
+      onToast?.(`File terlalu kecil (${blob.size} bytes). Error.`, "error");
       setState((s) => { const n = { ...s }; delete n[key]; return n; });
       return;
     }
@@ -964,7 +962,7 @@ export function TikTokDownloader({ onToast }) {
   );
 }
 
-/* ============ YOUTUBE DOWNLOADER (Invidious) ============ */
+/* ============ YOUTUBE DOWNLOADER ============ */
 export function YouTubeDownloader({ onToast }) {
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState("video");
@@ -1035,7 +1033,7 @@ export function YouTubeDownloader({ onToast }) {
   );
 }
 
-/* ============ MEDIA DOWNLOADER (btch multi-platform) ============ */
+/* ============ MEDIA DOWNLOADER ============ */
 export function MediaDownloader({ onToast }) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1185,7 +1183,7 @@ export function TempMail({ onToast }) {
       if (!r.ok || d.error) { setErr(d.error || "Gagal"); onToast?.(d.error || "Gagal", "error"); }
       else {
         setMailbox(d); setMsgs([]); setDetail(null); setNewCount(0);
-        localStorage.setItem("alltool-mail-v12", JSON.stringify({ ...d, ts: Date.now() }));
+        localStorage.setItem("alltool-mail-v13", JSON.stringify({ ...d, ts: Date.now() }));
         onToast?.("Email siap", "success");
       }
     } catch { setErr("Kesalahan jaringan"); onToast?.("Kesalahan jaringan", "error"); }
@@ -1233,7 +1231,7 @@ export function TempMail({ onToast }) {
   };
 
   useEffect(() => {
-    const s = localStorage.getItem("alltool-mail-v12");
+    const s = localStorage.getItem("alltool-mail-v13");
     if (s) {
       try {
         const mb = JSON.parse(s);
@@ -1331,7 +1329,7 @@ export function TempMail({ onToast }) {
   );
 }
 
-/* ============ KOMIK READER (MangaDex fixed) ============ */
+/* ============ KOMIK READER (MangaMint — Indonesia) ============ */
 export function KomikReader({ onToast }) {
   const [mode, setMode] = useState("home");
   const [mangaList, setMangaList] = useState([]);
@@ -1340,11 +1338,12 @@ export function KomikReader({ onToast }) {
   const [detail, setDetail] = useState(null);
   const [chapter, setChapter] = useState(null);
   const [err, setErr] = useState("");
+  const [page, setPage] = useState(1);
 
-  const loadPopular = async () => {
-    setLoading(true); setErr("");
+  const loadPopular = async (p = 1) => {
+    setLoading(true); setErr(""); setPage(p);
     try {
-      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-popular" }) });
+      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-popular", page: p }) });
       const d = await r.json();
       if (d.error) setErr(d.error);
       else setMangaList(d.list || []);
@@ -1353,7 +1352,7 @@ export function KomikReader({ onToast }) {
   };
 
   const doSearch = async () => {
-    if (!search.trim()) return loadPopular();
+    if (!search.trim()) return loadPopular(1);
     setLoading(true); setErr("");
     try {
       const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manga-search", q: search }) });
@@ -1386,92 +1385,203 @@ export function KomikReader({ onToast }) {
     setLoading(false);
   };
 
-  useEffect(() => { loadPopular(); }, []);
+  useEffect(() => { loadPopular(1); }, []);
 
+  /* READER MODE */
   if (mode === "reader" && chapter) {
     return (
       <div className="col">
-        <div className="card" style={{ position: "sticky", top: 70, zIndex: 10 }}>
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <button className="btn btn-g" onClick={() => { setMode("detail"); setChapter(null); }}><I.ArrowLeft size={16} />Kembali</button>
+        <div className="card" style={{ position: "sticky", top: 70, zIndex: 10, padding: 12 }}>
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <button className="btn btn-g" onClick={() => { setMode("detail"); setChapter(null); }}>
+              <I.ArrowLeft size={16} />Kembali
+            </button>
             <div className="soft">{chapter.pages} halaman</div>
           </div>
         </div>
-        {loading && <div className="card" style={{ textAlign: "center", padding: 40 }}><I.Loader2 size={32} className="spin" style={{ color: "var(--p)" }} /></div>}
-        <div className="manga-pages">
+        {loading && (
+          <div className="card" style={{ textAlign: "center", padding: 40 }}>
+            <I.Loader2 size={32} className="spin" style={{ color: "var(--p)", margin: "0 auto" }} />
+            <div className="mut" style={{ marginTop: 12 }}>Memuat halaman...</div>
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           {chapter.images?.map((img, i) => (
-            <img key={i} src={img} alt={`page-${i + 1}`} loading="lazy" referrerPolicy="no-referrer" style={{ width: "100%", maxWidth: 800, display: "block", margin: "0 auto" }} />
+            <img key={i} src={img} alt={`page-${i + 1}`} loading="lazy" referrerPolicy="no-referrer" style={{ width: "100%", maxWidth: 800, display: "block", margin: "0 auto", background: "#000" }} />
           ))}
         </div>
+        {chapter.nav && (chapter.nav.prev || chapter.nav.next) && (
+          <div className="row" style={{ justifyContent: "space-between", marginTop: 16 }}>
+            {chapter.nav.prev ? (
+              <button className="btn btn-s" onClick={() => openChapter(chapter.nav.prev)}>
+                <I.ArrowLeft size={14} />Sebelumnya
+              </button>
+            ) : <div />}
+            {chapter.nav.next ? (
+              <button className="btn btn-p" onClick={() => openChapter(chapter.nav.next)}>
+                Selanjutnya<I.ArrowRight size={14} />
+              </button>
+            ) : <div />}
+          </div>
+        )}
       </div>
     );
   }
 
+  /* DETAIL MODE */
   if (mode === "detail" && detail) {
     const info = detail.info;
     const chapters = detail.chapters || [];
     return (
       <div className="col">
-        <button className="btn btn-g" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("home"); setDetail(null); }}><I.ArrowLeft size={16} />Kembali</button>
-        <div className="card">
-          <div className="row" style={{ gap: 16, alignItems: "flex-start" }}>
-            <img src={info.thumb} style={{ width: 120, borderRadius: 12, flexShrink: 0 }} alt={info.title} referrerPolicy="no-referrer" />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6, lineHeight: 1.3 }}>{info.title}</h2>
-              {info.altTitle && <div className="mut" style={{ fontSize: 11, marginBottom: 6 }}>{info.altTitle}</div>}
-              <div className="row">
-                <span className="pill" style={{ fontSize: 10 }}>{info.status}</span>
-                {info.year && <span className="pill" style={{ fontSize: 10 }}>{info.year}</span>}
+        <button className="btn btn-g" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("home"); setDetail(null); }}>
+          <I.ArrowLeft size={16} />Kembali
+        </button>
+
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ position: "relative", minHeight: 220 }}>
+            {info.thumb && (
+              <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+                <img src={info.thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", filter: "blur(30px) brightness(0.4)", transform: "scale(1.2)" }} referrerPolicy="no-referrer" />
               </div>
-              <div className="row" style={{ marginTop: 8 }}>
-                {(info.tags || []).slice(0, 4).map((g, i) => (
-                  <span key={i} style={{ fontSize: 10, padding: "2px 8px", background: "var(--ps)", borderRadius: 12, color: "var(--p)" }}>{g}</span>
-                ))}
+            )}
+            <div style={{ position: "relative", display: "flex", gap: 16, padding: 20 }}>
+              <img src={info.thumb} alt={info.title} referrerPolicy="no-referrer" style={{ width: 120, height: 170, objectFit: "cover", borderRadius: 12, boxShadow: "0 20px 40px rgba(0,0,0,0.5)", flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0, color: "#fff" }}>
+                <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 8, lineHeight: 1.3 }}>{info.title}</h2>
+                <div className="row" style={{ marginBottom: 8 }}>
+                  {info.type && <span className="pill" style={{ fontSize: 10 }}>{info.type}</span>}
+                  {info.status && <span className="pill" style={{ fontSize: 10 }}>{info.status}</span>}
+                </div>
+                {info.rating && (
+                  <div className="row" style={{ gap: 6, marginBottom: 6, fontSize: 13, color: "#fff" }}>
+                    <I.Star size={14} fill="#fbbf24" color="#fbbf24" />
+                    <b>{info.rating}</b>
+                  </div>
+                )}
+                {info.author && (
+                  <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
+                    <I.User size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />
+                    {info.author}
+                  </div>
+                )}
               </div>
             </div>
           </div>
-          <div className="mut" style={{ marginTop: 14, fontSize: 12, lineHeight: 1.7 }}>{info.desc}</div>
+          <div style={{ padding: 20 }}>
+            {info.genres && info.genres.length > 0 && (
+              <>
+                <div className="tag" style={{ marginBottom: 8 }}>GENRE</div>
+                <div className="row" style={{ marginBottom: 16 }}>
+                  {info.genres.map((g, i) => (
+                    <span key={i} style={{ fontSize: 11, padding: "4px 10px", background: "var(--ps)", borderRadius: 12, color: "var(--p)", fontWeight: 600 }}>{g}</span>
+                  ))}
+                </div>
+              </>
+            )}
+            <div className="tag" style={{ marginBottom: 8 }}>SINOPSIS</div>
+            <div className="mut" style={{ fontSize: 13, lineHeight: 1.7 }}>{info.desc || "Tidak ada sinopsis."}</div>
+          </div>
         </div>
+
         <div className="card">
-          <div className="tag" style={{ marginBottom: 10 }}>{chapters.length} CHAPTER</div>
-          <div style={{ maxHeight: 400, overflowY: "auto" }}>
-            {chapters.map((c) => (
-              <button key={c.id} onClick={() => openChapter(c.id)} style={{ width: "100%", display: "flex", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid var(--border)", textAlign: "left", background: "transparent", gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Ch. {c.chapter} {c.title ? `- ${c.title}` : ""}</span>
-                <span className="soft" style={{ fontSize: 10 }}>{c.lang?.toUpperCase()} • {c.pages}p</span>
+          <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+            <div className="tag">{chapters.length} CHAPTER</div>
+          </div>
+          <div style={{ maxHeight: 500, overflowY: "auto" }}>
+            {chapters.map((c, i) => (
+              <button key={c.id || i} onClick={() => openChapter(c.id)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: "1px solid var(--border)", textAlign: "left", background: "transparent", gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || `Chapter ${i + 1}`}</div>
+                  {c.date && <div className="soft" style={{ marginTop: 3 }}>{c.date}</div>}
+                </div>
+                <I.ChevronRight size={16} style={{ color: "var(--p)", flexShrink: 0 }} />
               </button>
             ))}
-            {chapters.length === 0 && <div className="mut" style={{ textAlign: "center", padding: 20 }}>Belum ada chapter tersedia</div>}
+            {chapters.length === 0 && (<div className="mut" style={{ textAlign: "center", padding: 30 }}>Belum ada chapter</div>)}
           </div>
         </div>
       </div>
     );
   }
 
+  /* HOME MODE */
   return (
     <div className="col">
       <div className="card">
         <div className="row">
-          <input className="inp" style={{ flex: 1 }} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && doSearch()} placeholder="Cari manga atau manhwa..." />
+          <input className="inp" style={{ flex: 1 }} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && doSearch()} placeholder="Cari manga, manhwa, atau manhua..." />
           <button className="btn btn-p" onClick={doSearch} disabled={loading}>
             {loading ? <I.Loader2 size={14} className="spin" /> : <I.Search size={14} />}Cari
           </button>
         </div>
       </div>
-      {err && <div className="card" style={{ color: "var(--red)", textAlign: "center" }}>{err}</div>}
-      {loading && mangaList.length === 0 && <div className="card" style={{ textAlign: "center", padding: 40 }}><I.Loader2 size={32} className="spin" style={{ color: "var(--p)", margin: "0 auto" }} /></div>}
-      <div className="manga-grid">
-        {mangaList.map((m) => (
-          <div key={m.id} className="manga-card" onClick={() => openDetail(m.id)}>
-            {m.thumb && <img src={m.thumb} alt={m.title} loading="lazy" referrerPolicy="no-referrer" />}
-            <div className="manga-info">{m.title}</div>
+
+      {err && (
+        <div className="card" style={{ color: "var(--red)", textAlign: "center", padding: 20 }}>
+          <I.AlertCircle size={32} style={{ margin: "0 auto 8px", opacity: 0.5 }} />
+          <div>{err}</div>
+          <button className="btn btn-s" style={{ marginTop: 12 }} onClick={() => loadPopular(1)}>Coba Lagi</button>
+        </div>
+      )}
+
+      {loading && mangaList.length === 0 && (
+        <div className="card" style={{ textAlign: "center", padding: 60 }}>
+          <I.Loader2 size={36} className="spin" style={{ color: "var(--p)", margin: "0 auto" }} />
+          <div className="mut" style={{ marginTop: 12 }}>Memuat komik...</div>
+        </div>
+      )}
+
+      {mangaList.length > 0 && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
+            {mangaList.map((m) => (
+              <div key={m.id} onClick={() => openDetail(m.id)} style={{ cursor: "pointer", borderRadius: 14, overflow: "hidden", background: "var(--card-solid)", border: "1px solid var(--border)", transition: "all 0.2s" }}>
+                <div style={{ position: "relative", aspectRatio: "3/4", overflow: "hidden", background: "var(--ps)" }}>
+                  {m.thumb ? (
+                    <img src={m.thumb} alt={m.title} loading="lazy" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  ) : (
+                    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <I.BookOpen size={32} style={{ opacity: 0.3 }} />
+                    </div>
+                  )}
+                  {m.type && (
+                    <div style={{ position: "absolute", top: 8, left: 8, padding: "3px 8px", borderRadius: 6, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 9, fontWeight: 700 }}>
+                      {m.type.toUpperCase()}
+                    </div>
+                  )}
+                  {m.chapter && (
+                    <div style={{ position: "absolute", bottom: 8, right: 8, padding: "3px 8px", borderRadius: 6, background: "var(--p)", color: "#fff", fontSize: 9, fontWeight: 700 }}>
+                      {m.chapter}
+                    </div>
+                  )}
+                </div>
+                <div style={{ padding: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: 32 }}>
+                    {m.title}
+                  </div>
+                  {m.updated && (<div className="soft" style={{ marginTop: 6, fontSize: 10 }}>{m.updated}</div>)}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      {mangaList.length === 0 && !loading && (
-        <div className="card" style={{ textAlign: "center", padding: 40 }}>
-          <I.BookOpen size={40} style={{ opacity: 0.3, margin: "0 auto 10px" }} />
-          <div className="mut">Tidak ada manga ditemukan</div>
+
+          <div className="row" style={{ justifyContent: "center", marginTop: 20 }}>
+            <button className="btn btn-s" disabled={page <= 1 || loading} onClick={() => loadPopular(page - 1)}>
+              <I.ArrowLeft size={14} />Sebelumnya
+            </button>
+            <div className="pill">Halaman {page}</div>
+            <button className="btn btn-p" disabled={loading} onClick={() => loadPopular(page + 1)}>
+              Selanjutnya<I.ArrowRight size={14} />
+            </button>
+          </div>
+        </>
+      )}
+
+      {mangaList.length === 0 && !loading && !err && (
+        <div className="card" style={{ textAlign: "center", padding: 60 }}>
+          <I.BookOpen size={48} style={{ opacity: 0.3, margin: "0 auto 12px" }} />
+          <div className="mut">Tidak ada komik ditemukan</div>
         </div>
       )}
     </div>
@@ -1520,7 +1630,7 @@ export function AIChat({ onToast }) {
     if (!text || loading) return;
     const apiKey = keys[activeModel.provider] || "";
     if (!apiKey) {
-      onToast?.(`API key ${activeProvider.name} belum diatur. Buka Pengaturan.`, "error");
+      onToast?.(`API key ${activeProvider.name} belum diatur.`, "error");
       setShowSettings(true);
       return;
     }
@@ -1934,4 +2044,4 @@ export function IpLookup({ onToast }) {
       </div>}
     </div>
   );
-                          }
+              }
