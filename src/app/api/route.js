@@ -14,6 +14,23 @@ async function fetchT(url, opts = {}, ms = 15000) {
   } catch (e) { clearTimeout(t); throw e; }
 }
 
+/* ============ SIMPLE CACHE ============ */
+const cache = new Map();
+const CACHE_TTL = 60000;
+function getCache(key) {
+  const item = cache.get(key);
+  if (!item) return null;
+  if (Date.now() - item.ts > CACHE_TTL) { cache.delete(key); return null; }
+  return item.data;
+}
+function setCache(key, data) {
+  cache.set(key, { data, ts: Date.now() });
+  if (cache.size > 100) {
+    const oldest = [...cache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0];
+    if (oldest) cache.delete(oldest[0]);
+  }
+}
+
 /* ============ TIKTOK ============ */
 async function tiktokDownload(url) {
   const endpoints = [
@@ -45,7 +62,7 @@ async function tiktokDownload(url) {
   return null;
 }
 
-/* ============ YOUTUBE (Invidious) ============ */
+/* ============ YOUTUBE ============ */
 function extractYtId(url) {
   const m = String(url || "").match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
   return m ? m[1] : null;
@@ -55,7 +72,6 @@ const INVIDIOUS_INSTANCES = [
   "https://inv.nadeko.net",
   "https://invidious.nerdvpn.de",
   "https://yewtu.be",
-  "https://invidious.snopyta.org",
 ];
 
 async function youtubeDownload(url, mode = "video", quality = "1080") {
@@ -69,12 +85,10 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
       if (!r.ok) continue;
       const d = await r.json();
       if (d.error) continue;
-
       const title = d.title || `YouTube ${vid}`;
       const streams = mode === "audio"
         ? (d.adaptiveFormats || []).filter((f) => f.type?.startsWith("audio"))
         : (d.formatStreams || []).concat(d.adaptiveFormats || []).filter((f) => f.type?.startsWith("video"));
-
       if (streams.length > 0) {
         let picked = streams[0];
         if (mode === "video") {
@@ -87,7 +101,6 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
         } else {
           picked = streams.find((f) => f.bitrate > 100000) || streams[0];
         }
-
         const downloadUrl = picked.url?.startsWith("http") ? picked.url : `${inst}${picked.url}`;
         return { videoId: vid, downloadUrl, title, thumbnail: thumb, mode, quality };
       }
@@ -123,6 +136,15 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
 }
 
 /* ============ MEDIA DOWNLOADER ============ */
+function detectPlatform(url) {
+  if (/instagram\.com/i.test(url)) return "instagram";
+  if (/facebook\.com|fb\.watch/i.test(url)) return "facebook";
+  if (/twitter\.com|x\.com/i.test(url)) return "twitter";
+  if (/pinterest\.com/i.test(url)) return "pinterest";
+  if (/reddit\.com/i.test(url)) return "reddit";
+  return "media";
+}
+
 async function mediaDownload(url) {
   if (/tiktok\.com|vt\.tiktok|vm\.tiktok/i.test(url)) {
     const d = await tiktokDownload(url);
@@ -132,7 +154,6 @@ async function mediaDownload(url) {
     const d = await youtubeDownload(url, "video", "1080");
     if (!d.error) return { platform: "youtube", downloadUrl: d.downloadUrl, title: d.title, thumbnail: d.thumbnail };
   }
-
   try {
     const r = await fetchT(`https://btch-downloader-api-green.vercel.app/api/download/aio?url=${encodeURIComponent(url)}`, {}, 18000);
     if (r.ok) {
@@ -151,7 +172,7 @@ async function mediaDownload(url) {
     }
   } catch (e) { console.warn("[btch]", e.message); }
 
-  const cobaltInstances = ["https://cobalt-api.kwiatekmiki.com/api/json", "https://api.cobalt.tools/api/json", "https://co.wuk.sh/api/json"];
+  const cobaltInstances = ["https://cobalt-api.kwiatekmiki.com/api/json", "https://api.cobalt.tools/api/json"];
   for (const inst of cobaltInstances) {
     try {
       const r = await fetchT(inst, {
@@ -167,15 +188,6 @@ async function mediaDownload(url) {
   }
 
   throw new Error("Platform tidak didukung atau video private.");
-}
-
-function detectPlatform(url) {
-  if (/instagram\.com/i.test(url)) return "instagram";
-  if (/facebook\.com|fb\.watch/i.test(url)) return "facebook";
-  if (/twitter\.com|x\.com/i.test(url)) return "twitter";
-  if (/pinterest\.com/i.test(url)) return "pinterest";
-  if (/reddit\.com/i.test(url)) return "reddit";
-  return "media";
 }
 
 /* ============ TEMP MAIL ============ */
@@ -225,7 +237,6 @@ async function inboxTempMail(token) {
 async function proxyStream(targetUrl, request, forceDownload = false, customName = "") {
   const rangeHeader = request.headers.get("range") || "";
   const headers = { "User-Agent": UA, Accept: "*/*" };
-
   try {
     const host = new URL(targetUrl).hostname;
     if (host.includes("youtube") || host.includes("googlevideo")) {
@@ -235,11 +246,12 @@ async function proxyStream(targetUrl, request, forceDownload = false, customName
       headers.Referer = "https://www.tiktok.com/";
     } else if (host.includes("instagram") || host.includes("cdninstagram")) {
       headers.Referer = "https://www.instagram.com/";
+    } else if (host.includes("bacakomik") || host.includes("wp.com") || host.includes("imageainewgeneration") || host.includes("himmga") || host.includes("gaimgame")) {
+      headers.Referer = "https://bacakomik.my/";
     } else {
       headers.Referer = targetUrl;
     }
   } catch { headers.Referer = targetUrl; }
-
   if (rangeHeader) headers.Range = rangeHeader;
 
   const r = await fetchT(targetUrl, { headers }, 45000);
@@ -270,7 +282,6 @@ async function proxyStream(targetUrl, request, forceDownload = false, customName
 
   outHeaders.set("Accept-Ranges", "bytes");
   outHeaders.set("Access-Control-Allow-Origin", "*");
-
   return new Response(r.body, { status: r.status, headers: outHeaders });
 }
 
@@ -317,80 +328,81 @@ async function aiChat(messages, model, provider, apiKey) {
 }
 
 /* ============ MANGA — BacaKomik (Sanka Vollerei) ============ */
-const SK_BASE = "https://api.sankavollerei.web.id";
+const SK_BASE = "https://www.sankavollerei.web.id";
 const SK_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
 async function mangaPopular(page = 1) {
-  // Coba populer dulu
-  try {
-    const r = await fetchT(`${SK_BASE}/comic/bacakomik/populer`, { headers: { "User-Agent": SK_UA } }, 12000);
-    if (r.ok) {
-      const d = await r.json();
-      if (d.success && d.komikList && d.komikList.length > 0) {
-        return {
-          list: d.komikList.map((m) => ({
-            id: m.slug,
-            title: m.title,
-            thumb: m.cover,
-            type: m.type || "Manga",
-            rating: m.rating || "",
-            chapter: m.chapter || "",
-            updated: m.date || "",
-          })),
-          hasNext: false,
-          currentPage: 1,
-        };
+  const cacheKey = `manga-popular-${page}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
+  // Coba endpoint populer dulu (page 1 saja)
+  if (page === 1) {
+    try {
+      const r = await fetchT(`${SK_BASE}/comic/bacakomik/populer`, { headers: { "User-Agent": SK_UA } }, 12000);
+      if (r.ok) {
+        const d = await r.json();
+        if (d.success && d.komikList && d.komikList.length > 0) {
+          const result = {
+            list: d.komikList.map((m) => ({
+              id: m.slug, title: m.title, thumb: m.cover,
+              type: m.type || "Manga", rating: m.rating || "",
+            })),
+            hasNext: false, currentPage: 1,
+          };
+          setCache(cacheKey, result);
+          return result;
+        }
       }
-    }
-  } catch (e) { console.warn("[bacakomik populer]", e.message); }
+    } catch (e) { console.warn("[bacakomik populer]", e.message); }
+  }
 
-  // Fallback latest (kalau butuh pagination, ganti URL ke /list/ + page)
-  const url = page > 1
-    ? `${SK_BASE}/comic/bacakomik/list/${page}`
-    : `${SK_BASE}/comic/bacakomik/latest`;
-
-  const r = await fetchT(url, { headers: { "User-Agent": SK_UA } }, 12000);
+  // Fallback latest
+  const r = await fetchT(`${SK_BASE}/comic/bacakomik/latest`, { headers: { "User-Agent": SK_UA } }, 12000);
   if (!r.ok) throw new Error("Gagal load komik.");
   const d = await r.json();
-  return {
+  const result = {
     list: (d.komikList || []).map((m) => ({
-      id: m.slug,
-      title: m.title,
-      thumb: m.cover,
-      type: m.type || "Manga",
-      chapter: m.chapter || "",
+      id: m.slug, title: m.title, thumb: m.cover,
+      type: m.type || "Manga", chapter: m.chapter || "",
       updated: m.date || "",
     })),
-    hasNext: d.hasNextPage || false,
-    currentPage: d.currentPage || page,
+    hasNext: d.hasNextPage || false, currentPage: d.currentPage || 1,
   };
+  setCache(cacheKey, result);
+  return result;
 }
 
 async function mangaSearch(q) {
+  const cacheKey = `manga-search-${q}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
   const r = await fetchT(`${SK_BASE}/comic/bacakomik/search/${encodeURIComponent(q)}`, { headers: { "User-Agent": SK_UA } }, 12000);
   if (!r.ok) throw new Error("Gagal search.");
   const d = await r.json();
-  return {
+  const result = {
     list: (d.komikList || []).map((m) => ({
-      id: m.slug,
-      title: m.title,
-      thumb: m.cover,
-      type: m.type || "Manga",
-      rating: m.rating || "",
+      id: m.slug, title: m.title, thumb: m.cover,
+      type: m.type || "Manga", rating: m.rating || "",
     })),
-    hasNext: false,
-    currentPage: 1,
+    hasNext: false, currentPage: 1,
   };
+  setCache(cacheKey, result);
+  return result;
 }
 
 async function mangaDetail(slug) {
+  const cacheKey = `manga-detail-${slug}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
   const r = await fetchT(`${SK_BASE}/comic/bacakomik/detail/${encodeURIComponent(slug)}`, { headers: { "User-Agent": SK_UA } }, 12000);
   if (!r.ok) throw new Error("Gagal load detail.");
   const d = await r.json();
   if (!d.success || !d.detail) throw new Error("Komik tidak ditemukan.");
 
   const det = d.detail;
-
   const info = {
     id: slug,
     title: det.title || "",
@@ -407,23 +419,26 @@ async function mangaDetail(slug) {
     desc: det.synopsis || "",
     genres: (det.genres || []).map((g) => g.title || ""),
   };
-
   const chapters = (det.chapters || []).map((c) => ({
-    id: c.slug,
-    title: c.title || "",
-    date: c.date || "",
+    id: c.slug, title: c.title || "", date: c.date || "",
   }));
 
-  return { info, chapters };
+  const result = { info, chapters };
+  setCache(cacheKey, result);
+  return result;
 }
 
 async function mangaChapter(slug) {
+  const cacheKey = `manga-chapter-${slug}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
   const r = await fetchT(`${SK_BASE}/comic/bacakomik/chapter/${encodeURIComponent(slug)}`, { headers: { "User-Agent": SK_UA } }, 15000);
   if (!r.ok) throw new Error("Gagal load chapter.");
   const d = await r.json();
   if (!d.success) throw new Error("Chapter tidak ditemukan.");
 
-  return {
+  const result = {
     images: (d.images || []).map((img) => typeof img === "string" ? img : (img.url || "")),
     pages: (d.images || []).length,
     title: d.title || "",
@@ -432,6 +447,8 @@ async function mangaChapter(slug) {
       next: d.navigation?.next || "",
     },
   };
+  setCache(cacheKey, result);
+  return result;
 }
 
 /* ============ HANDLER ============ */
@@ -546,5 +563,5 @@ export async function GET(req) {
     try { return await proxyStream(proxyUrl, req, forceDl, customName); }
     catch (e) { return Response.json({ error: e.message }, { status: 500 }); }
   }
-  return Response.json({ ok: true, service: "AllTool API", version: "13.0" });
-            }
+  return Response.json({ ok: true, service: "AllTool API", version: "14.0" });
+                           }
