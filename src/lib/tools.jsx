@@ -994,8 +994,14 @@ export function YouTubeDownloader({ onToast }) {
     try {
       const res = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "youtube", url, mode, quality }) });
       const d = await res.json();
-      if (!res.ok) { setE(d.error || "Gagal"); if (d.videoId) setFb(d.videoId); onToast?.(d.error || "Gagal", "error"); }
-      else { setR(d); onToast?.("Video siap.", "success"); }
+      if (!res.ok) {
+        setE(d.error || "Gagal ambil video.");
+        if (d.videoId) setFb(d.videoId);
+        onToast?.(d.error || "Gagal", "error");
+      } else {
+        setR(d);
+        onToast?.("Video siap. Klik tombol download.", "success");
+      }
     } catch { setE("Kesalahan jaringan."); }
     setLoading(false);
   };
@@ -1038,76 +1044,10 @@ export function YouTubeDownloader({ onToast }) {
           <div className="row" style={{ marginTop: 14 }}>
             <button className="btn btn-p" disabled={dlState["video"] != null && dlState["video"] < 100}
               onClick={() => forceDownload(r.downloadUrl, `${(r.title || "youtube").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}.${mode === "audio" ? "mp3" : "mp4"}`, "video", setDlState, onToast)}>
-              {dlState["video"] != null && dlState["video"] < 100 ? <><I.Loader2 size={14} className="spin" />Memproses...</> : <><I.Download size={14} />Download</>}
+              {dlState["video"] != null && dlState["video"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["video"]}%</> : <><I.Download size={14} />Download</>}
             </button>
             <a className="btn btn-s" href={r.downloadUrl} target="_blank" rel="noopener"><I.ExternalLink size={14} />Buka Manual</a>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ============ MEDIA DOWNLOADER ============ */
-export function MediaDownloader({ onToast }) {
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [r, setR] = useState(null);
-  const [e, setE] = useState("");
-  const [dlState, setDlState] = useState({});
-
-  const go = async () => {
-    if (!url) return;
-    setLoading(true); setE(""); setR(null); setDlState({});
-    try {
-      const res = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "media", url }) });
-      const d = await res.json();
-      if (!res.ok) { setE(d.error || "Gagal ambil media"); onToast?.(d.error || "Gagal", "error"); }
-      else { setR(d); onToast?.(`Media dari ${d.platform} siap`, "success"); }
-    } catch { setE("Kesalahan jaringan."); }
-    setLoading(false);
-  };
-
-  const platforms = [
-    { name: "TikTok", icon: "Music" }, { name: "YouTube", icon: "Youtube" },
-    { name: "Instagram", icon: "Instagram" }, { name: "Facebook", icon: "Facebook" },
-    { name: "X", icon: "Twitter" }, { name: "Pinterest", icon: "Image" },
-  ];
-
-  return (
-    <div className="col">
-      <div className="card">
-        <div className="tag" style={{ marginBottom: 10 }}>URL VIDEO / MEDIA</div>
-        <div className="row">
-          <input className="inp" style={{ flex: 1, minWidth: 200 }} value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} placeholder="Paste URL dari platform apa saja..." />
-          <button className="btn btn-p" disabled={loading || !url} onClick={go} style={{ minWidth: 120 }}>
-            {loading ? <I.Loader2 size={16} className="spin" /> : <I.Search size={16} />}
-            {loading ? "Proses..." : "Ambil Media"}
-          </button>
-        </div>
-        <div className="row" style={{ marginTop: 12 }}>
-          {platforms.map((p) => {
-            const C = I[p.icon] || I.Globe;
-            return (
-              <div key={p.name} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", background: "var(--ps)", borderRadius: 20, fontSize: 11, color: "var(--p)", fontWeight: 600 }}>
-                <C size={12} />{p.name}
-              </div>
-            );
-          })}
-        </div>
-        {e && <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{e}</div>}
-      </div>
-      {r && (
-        <div className="card fade">
-          <div className="tag" style={{ marginBottom: 10 }}>PLATFORM: {(r.platform || "").toUpperCase()}</div>
-          {r.thumbnail && <img src={r.thumbnail} style={{ width: "100%", borderRadius: 14, maxHeight: 300, objectFit: "cover" }} alt="Preview" />}
-          <div style={{ fontWeight: 700, marginTop: 12 }}>{r.title}</div>
-          {r.downloadUrl && (
-            <button className="btn btn-p" style={{ marginTop: 14, width: "100%" }} disabled={dlState.dl != null && dlState.dl < 100}
-              onClick={() => forceDownload(r.downloadUrl, `${(r.title || "media").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}.mp4`, "dl", setDlState, onToast)}>
-              {dlState.dl != null && dlState.dl < 100 ? <><I.Loader2 size={14} className="spin" />Memproses...</> : <><I.Download size={14} />Download Video</>}
-            </button>
-          )}
         </div>
       )}
     </div>
