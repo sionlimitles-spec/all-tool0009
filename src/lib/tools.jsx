@@ -25,21 +25,105 @@ const fmt = (n) => !n ? "0" : n > 1e6 ? (n / 1e6).toFixed(1) + "M" : n > 1e3 ? (
 /* FORCE DOWNLOAD — pakai anchor tag langsung, tidak buka tab baru */
 async function forceDownload(targetUrl, filename, key, setState, onToast) {
   if (!targetUrl) { onToast?.("URL tidak tersedia", "error"); return; }
-  const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}&dl=1&name=${encodeURIComponent(filename)}`;
+  setState((s) => ({ ...s, [key]: 0 }));
+
+  let res = null;
+  let usedDirect = false;
+
+  // STEP 1: Coba fetch langsung dari browser (tidak ada timeout 10 detik)
   try {
-    setState((s) => ({ ...s, [key]: -1 }));
+    res = await fetch(targetUrl, { mode: "cors", credentials: "omit" });
+    if (!res.ok) {
+      res = null;
+    } else {
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("text/html") || ct.includes("application/json") || ct.includes("text/plain")) {
+        res = null;
+      } else {
+        usedDirect = true;
+      }
+    }
+  } catch {
+    res = null;
+  }
+
+  // STEP 2: Kalau direct gagal, coba lewat proxy
+  if (!res) {
+    try {
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}&dl=1&name=${encodeURIComponent(filename)}`;
+      res = await fetch(proxyUrl);
+    } catch {
+      onToast?.("Gagal akses server. Coba lagi 1-2 menit.", "error");
+      setState((s) => { const n = { ...s }; delete n[key]; return n; });
+      return;
+    }
+  }
+
+  // STEP 3: Verifikasi response
+  if (!res.ok) {
+    onToast?.(`Server error (${res.status}). Coba lagi 1-2 menit.`, "error");
+    setState((s) => { const n = { ...s }; delete n[key]; return n; });
+    return;
+  }
+
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("text/html") || ct.includes("application/json")) {
+    onToast?.("Server kirim error, bukan video. Coba lagi atau pakai video lain.", "error");
+    setState((s) => { const n = { ...s }; delete n[key]; return n; });
+    return;
+  }
+
+  // STEP 4: Download file
+  try {
+    const total = Number(res.headers.get("content-length")) || 0;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let loaded = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.length;
+      if (total) {
+        setState((s) => ({ ...s, [key]: Math.min(99, Math.round((loaded / total) * 100)) }));
+      } else {
+        setState((s) => ({ ...s, [key]: Math.min(99, Math.round(loaded / 200000)) }));
+      }
+    }
+
+    const blob = new Blob(chunks, { type: ct || "video/mp4" });
+
+    // Cek: kalau file < 10KB dan tipenya HTML, itu error page
+    if (blob.size < 10240 && ct.includes("html")) {
+      onToast?.("File error, coba lagi.", "error");
+      setState((s) => { const n = { ...s }; delete n[key]; return n; });
+      return;
+    }
+
+    // Cek: kalau file < 1KB, itu pasti error
+    if (blob.size < 1024) {
+      onToast?.(`File terlalu kecil (${blob.size} bytes). Kemungkinan error.`, "error");
+      setState((s) => { const n = { ...s }; delete n[key]; return n; });
+      return;
+    }
+
+    const url2 = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = proxyUrl;
+    a.href = url2;
     a.download = filename;
     a.rel = "noopener";
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    onToast?.(`Download dimulai: ${filename}`, "success");
-    setTimeout(() => setState((s) => { const n = { ...s }; delete n[key]; return n; }), 2000);
+    setTimeout(() => URL.revokeObjectURL(url2), 5000);
+
+    setState((s) => ({ ...s, [key]: 100 }));
+    onToast?.(`${filename} berhasil diunduh`, "success");
+    setTimeout(() => setState((s) => { const n = { ...s }; delete n[key]; return n; }), 1500);
   } catch (e) {
-    onToast?.("Gagal download: " + e.message, "error");
+    onToast?.(`Gagal unduh: ${e.message}`, "error");
     setState((s) => { const n = { ...s }; delete n[key]; return n; });
   }
 }
@@ -672,6 +756,7 @@ export function PasswordStrength() {
     </div>
   );
 }
+
 /* ============ VIRUS SCANNER ============ */
 export function VirusScanner({ onToast }) {
   const [input, setInput] = useState("");
@@ -1861,4 +1946,4 @@ export function IpLookup({ onToast }) {
       </div>}
     </div>
   );
-                }
+                 }
