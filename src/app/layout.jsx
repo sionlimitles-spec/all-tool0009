@@ -1,19 +1,19 @@
+import type { Metadata } from "next";
 import "./globals.css";
 
-export const metadata = {
-  title: "AllTool - 50+ Alat Digital Gratis",
-  description: "Downloader TikTok, YouTube, temp mail, HTML editor, web to APK, dan 50+ tools gratis.",
-  keywords: ["alltool", "tools", "downloader", "tiktok", "youtube", "temp mail", "web to apk"],
+export const metadata: Metadata = {
+  title: "Komik Reader",
+  description: "Baca manga dan manhwa Bahasa Indonesia",
 };
 
-export const viewport = {
-  width: "device-width", initialScale: 1, maximumScale: 5, themeColor: "#7c3aed",
-};
-
-export default function RootLayout({ children }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="id" suppressHydrationWarning>
-      <body>{children}</body>
+    <html lang="id">
+      <body className="bg-zinc-950 text-zinc-100">{children}</body>
     </html>
   );
 }
