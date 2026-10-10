@@ -22,36 +22,24 @@ export const copy = async (t) => {
 };
 const fmt = (n) => !n ? "0" : n > 1e6 ? (n / 1e6).toFixed(1) + "M" : n > 1e3 ? (n / 1e3).toFixed(1) + "K" : String(n);
 
-/* Force download via proxy dengan dl=1 */
+/* FORCE DOWNLOAD — pakai anchor tag langsung, tidak buka tab baru */
 async function forceDownload(targetUrl, filename, key, setState, onToast) {
   if (!targetUrl) { onToast?.("URL tidak tersedia", "error"); return; }
-  setState((s) => ({ ...s, [key]: 0 }));
+  const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}&dl=1&name=${encodeURIComponent(filename)}`;
   try {
-    const res = await fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}&dl=1`);
-    if (!res.ok) throw new Error(`${res.status}`);
-    const total = Number(res.headers.get("content-length")) || 0;
-    const reader = res.body.getReader();
-    const chunks = [];
-    let loaded = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value); loaded += value.length;
-      if (total) setState((s) => ({ ...s, [key]: Math.min(99, Math.round((loaded / total) * 100)) }));
-      else setState((s) => ({ ...s, [key]: Math.min(99, Math.round(loaded / 100000)) }));
-    }
-    const blob = new Blob(chunks);
-    const url2 = URL.createObjectURL(blob);
+    setState((s) => ({ ...s, [key]: -1 }));
     const a = document.createElement("a");
-    a.href = url2; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url2), 5000);
-    setState((s) => ({ ...s, [key]: 100 }));
-    onToast?.(`${filename} terunduh`, "success");
-    setTimeout(() => setState((s) => { const n = { ...s }; delete n[key]; return n; }), 1200);
+    a.href = proxyUrl;
+    a.download = filename;
+    a.rel = "noopener";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    onToast?.(`Download dimulai: ${filename}`, "success");
+    setTimeout(() => setState((s) => { const n = { ...s }; delete n[key]; return n; }), 2000);
   } catch (e) {
-    onToast?.(`Fallback: buka di tab baru`, "info");
-    window.open(targetUrl, "_blank", "noopener");
+    onToast?.("Gagal download: " + e.message, "error");
     setState((s) => { const n = { ...s }; delete n[key]; return n; });
   }
 }
@@ -125,15 +113,11 @@ export function MarkdownPreview() {
   const html = useMemo(() => {
     let h = t
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-      .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-      .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      .replace(/^### (.+)$/gm, "<h3>$1</h3>").replace(/^## (.+)$/gm, "<h2>$1</h2>").replace(/^# (.+)$/gm, "<h1>$1</h1>")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\*(.+?)\*/g, "<em>$1</em>")
       .replace(/`([^`]+)`/g, "<code style='background:rgba(167,139,250,0.15);padding:2px 6px;border-radius:4px;font-family:monospace;color:var(--p)'>$1</code>")
       .replace(/```([\s\S]*?)```/g, "<pre style='background:rgba(0,0,0,0.4);color:#e2e8f0;padding:14px;border-radius:10px;overflow-x:auto;border:1px solid var(--border)'><code>$1</code></pre>")
-      .replace(/^\- (.+)$/gm, "<li>$1</li>")
-      .replace(/(<li>.*<\/li>)/s, "<ul>$1</ul>")
+      .replace(/^\- (.+)$/gm, "<li>$1</li>").replace(/(<li>.*<\/li>)/s, "<ul>$1</ul>")
       .replace(/\[(.+?)\]\((.+?)\)/g, "<a href='$2' style='color:var(--p)'>$1</a>")
       .replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>");
     return "<p>" + h + "</p>";
@@ -688,7 +672,6 @@ export function PasswordStrength() {
     </div>
   );
 }
-
 /* ============ VIRUS SCANNER ============ */
 export function VirusScanner({ onToast }) {
   const [input, setInput] = useState("");
@@ -888,16 +871,16 @@ export function TikTokDownloader({ onToast }) {
               <div className="col" style={{ marginTop: 14 }}>
                 <button className="btn btn-p" disabled={dlState["hd"] != null && dlState["hd"] < 100}
                   onClick={() => forceDownload(r.hd || r.noWm, `${(r.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_hd.mp4`, "hd", setDlState, onToast)}>
-                  {dlState["hd"] != null && dlState["hd"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["hd"]}%</> : <><I.Download size={14} />Download HD 1080p</>}
+                  {dlState["hd"] != null && dlState["hd"] < 100 ? <><I.Loader2 size={14} className="spin" />Memproses...</> : <><I.Download size={14} />Download HD 1080p</>}
                 </button>
                 <button className="btn btn-s" disabled={dlState["video"] != null && dlState["video"] < 100}
                   onClick={() => forceDownload(r.noWm, `${(r.title || "tiktok").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}_nowm.mp4`, "video", setDlState, onToast)}>
-                  {dlState["video"] != null && dlState["video"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["video"]}%</> : <><I.Download size={14} />No Watermark</>}
+                  {dlState["video"] != null && dlState["video"] < 100 ? <><I.Loader2 size={14} className="spin" />Memproses...</> : <><I.Download size={14} />No Watermark</>}
                 </button>
                 {r.music && (
                   <button className="btn btn-s" disabled={dlState["music"] != null && dlState["music"] < 100}
                     onClick={() => forceDownload(r.music, "audio.mp3", "music", setDlState, onToast)}>
-                    {dlState["music"] != null && dlState["music"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["music"]}%</> : <><I.Music size={14} />Audio MP3</>}
+                    {dlState["music"] != null && dlState["music"] < 100 ? <><I.Loader2 size={14} className="spin" />Memproses...</> : <><I.Music size={14} />Audio MP3</>}
                   </button>
                 )}
               </div>
@@ -970,7 +953,7 @@ export function YouTubeDownloader({ onToast }) {
           <div className="row" style={{ marginTop: 14 }}>
             <button className="btn btn-p" disabled={dlState["video"] != null && dlState["video"] < 100}
               onClick={() => forceDownload(r.downloadUrl, `${(r.title || "youtube").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}.${mode === "audio" ? "mp3" : "mp4"}`, "video", setDlState, onToast)}>
-              {dlState["video"] != null && dlState["video"] < 100 ? <><I.Loader2 size={14} className="spin" />{dlState["video"]}%</> : <><I.Download size={14} />Download</>}
+              {dlState["video"] != null && dlState["video"] < 100 ? <><I.Loader2 size={14} className="spin" />Memproses...</> : <><I.Download size={14} />Download</>}
             </button>
             <a className="btn btn-s" href={r.downloadUrl} target="_blank" rel="noopener"><I.ExternalLink size={14} />Buka Manual</a>
           </div>
@@ -1037,7 +1020,7 @@ export function MediaDownloader({ onToast }) {
           {r.downloadUrl && (
             <button className="btn btn-p" style={{ marginTop: 14, width: "100%" }} disabled={dlState.dl != null && dlState.dl < 100}
               onClick={() => forceDownload(r.downloadUrl, `${(r.title || "media").slice(0, 30).replace(/[^a-z0-9]/gi, "_")}.mp4`, "dl", setDlState, onToast)}>
-              {dlState.dl != null && dlState.dl < 100 ? <><I.Loader2 size={14} className="spin" />{dlState.dl}%</> : <><I.Download size={14} />Download Video</>}
+              {dlState.dl != null && dlState.dl < 100 ? <><I.Loader2 size={14} className="spin" />Memproses...</> : <><I.Download size={14} />Download Video</>}
             </button>
           )}
         </div>
@@ -1129,7 +1112,7 @@ export function TempMail({ onToast }) {
       if (!r.ok || d.error) { setErr(d.error || "Gagal"); onToast?.(d.error || "Gagal", "error"); }
       else {
         setMailbox(d); setMsgs([]); setDetail(null); setNewCount(0);
-        localStorage.setItem("alltool-mail-v9", JSON.stringify({ ...d, ts: Date.now() }));
+        localStorage.setItem("alltool-mail-v10", JSON.stringify({ ...d, ts: Date.now() }));
         onToast?.("Email siap", "success");
       }
     } catch { setErr("Kesalahan jaringan"); onToast?.("Kesalahan jaringan", "error"); }
@@ -1177,7 +1160,7 @@ export function TempMail({ onToast }) {
   };
 
   useEffect(() => {
-    const s = localStorage.getItem("alltool-mail-v9");
+    const s = localStorage.getItem("alltool-mail-v10");
     if (s) {
       try {
         const mb = JSON.parse(s);
@@ -1275,7 +1258,7 @@ export function TempMail({ onToast }) {
   );
 }
 
-/* ============ KOMIK READER ============ */
+/* ============ KOMIK READER (MangaDex) ============ */
 export function KomikReader({ onToast }) {
   const [mode, setMode] = useState("home");
   const [mangaList, setMangaList] = useState([]);
@@ -1379,7 +1362,7 @@ export function KomikReader({ onToast }) {
         <div className="card">
           <div className="tag" style={{ marginBottom: 10 }}>{chapters.length} CHAPTER</div>
           <div style={{ maxHeight: 400, overflowY: "auto" }}>
-            {chapters.map((c, i) => (
+            {chapters.map((c) => (
               <button key={c.id} onClick={() => openChapter(c.id)} style={{ width: "100%", display: "flex", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid var(--border)", textAlign: "left", background: "transparent", gap: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>Ch. {c.chapter} {c.title ? `- ${c.title}` : ""}</span>
                 <span className="soft" style={{ fontSize: 10 }}>{c.lang?.toUpperCase()} • {c.pages}p</span>
@@ -1422,7 +1405,7 @@ export function KomikReader({ onToast }) {
   );
 }
 
-/* ============ AI CHAT (Multi-Provider) ============ */
+/* ============ AI CHAT ============ */
 export function AIChat({ onToast }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -1475,10 +1458,7 @@ export function AIChat({ onToast }) {
     setInput("");
     setLoading(true);
 
-    const contextMsgs = [
-      { role: "system", content: SYSTEM_PROMPT },
-      ...newMsgs.slice(-10),
-    ];
+    const contextMsgs = [{ role: "system", content: SYSTEM_PROMPT }, ...newMsgs.slice(-10)];
 
     try {
       const r = await fetch("/api", {
@@ -1538,7 +1518,7 @@ export function AIChat({ onToast }) {
             <div key={p.id} style={{ marginBottom: 16, padding: 14, border: "1.5px solid var(--border)", borderRadius: 12 }}>
               <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>{p.name} {keys[p.id] && <span style={{ color: "var(--green)", fontSize: 11 }}>✓</span>}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{p.name} {keys[p.id] && <span style={{ color: "var(--green)", fontSize: 11 }}>OK</span>}</div>
                   <div className="soft" style={{ marginTop: 2 }}>{p.desc}</div>
                 </div>
                 <a href={p.keyUrl} target="_blank" rel="noopener" className="btn btn-s" style={{ fontSize: 11, padding: "6px 10px" }}><I.ExternalLink size={12} />Daftar</a>
@@ -1881,4 +1861,4 @@ export function IpLookup({ onToast }) {
       </div>}
     </div>
   );
-            }
+                }
