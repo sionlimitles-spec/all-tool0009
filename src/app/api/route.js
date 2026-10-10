@@ -45,80 +45,108 @@ async function tiktokDownload(url) {
   return null;
 }
 
-/* ============ YOUTUBE ============ */
-function extractYtId(url) {
-  const m = String(url || "").match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
-  return m ? m[1] : null;
-}
-
-const ZYLA_KEY = process.env.ZYLA_API_KEY || "";
-const ZYLA_BASE = "https://zylalabs.com/api/13741/youtube+downloader+reliable+api/31484";
+/* ============ YOUTUBE (Savenow.to + fallback gratis) ============ */
+const SAVENOW_KEY = process.env.SAVENOW_API_KEY || "";
+const SAVENOW_BASE = "https://p.savenow.to/api/v2/download";
 
 async function youtubeDownload(url, mode = "video", quality = "1080") {
   const vid = extractYtId(url);
   if (!vid) return { error: "URL YouTube tidak valid." };
 
-  // Fallback gratis: btch-downloader + cobalt
+  const cleanUrl = `https://www.youtube.com/watch?v=${vid}`;
+  const thumb = `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`;
+
+  // ===== SAVENOW (kalau ada API key) =====
+  if (SAVENOW_KEY) {
+    try {
+      const format = mode === "audio" ? "mp3" : "mp4";
+      const startUrl = `${SAVENOW_BASE}?format=${format}&url=${encodeURIComponent(cleanUrl)}&apikey=${SAVENOW_KEY}`;
+      
+      const r = await fetchT(startUrl, { headers: { "User-Agent": UA } }, 20000);
+      if (!r.ok) throw new Error(`Savenow HTTP ${r.status}`);
+      
+      const first = await r.json();
+      
+      // Kalau langsung selesai (success=1)
+      if (first.success === 1 || first.success === true) {
+        const dlUrl = first.download_url || first.downloadUrl || first.url;
+        if (dlUrl) {
+          return {
+            videoId: vid,
+            downloadUrl: dlUrl,
+            title: first.title || first.name || `YouTube ${vid}`,
+            thumbnail: first.thumbnail || first.thumb || thumb,
+            mode, quality,
+          };
+        }
+      }
+
+      // Kalau perlu polling
+      const checkUrl = first.check_url || first.checkUrl || first.status_url || first.progress_url;
+      if (checkUrl) {
+        for (let i = 0; i < 20; i++) {
+          await new Promise((res) => setTimeout(res, 2500));
+          const pr = await fetchT(checkUrl, { headers: { "User-Agent": UA } }, 10000);
+          if (!pr.ok) continue;
+          const pd = await pr.json();
+          const progress = pd.progress || pd.percentage || 0;
+          
+          // progress 1000 = selesai
+          if (progress >= 1000 || pd.success === 1 || pd.success === true) {
+            const dlUrl = pd.download_url || pd.downloadUrl || pd.url;
+            if (dlUrl) {
+              return {
+                videoId: vid,
+                downloadUrl: dlUrl,
+                title: pd.title || pd.name || `YouTube ${vid}`,
+                thumbnail: pd.thumbnail || pd.thumb || thumb,
+                mode, quality,
+              };
+            }
+          }
+          if (pd.success === 0 && pd.error) throw new Error(pd.error);
+        }
+      }
+
+      throw new Error("Timeout menunggu Savenow.");
+    } catch (e) {
+      console.warn("[Savenow]", e.message);
+      // Lanjut ke fallback gratis di bawah
+    }
+  }
+
+  // ===== FALLBACK GRATIS: btch-downloader =====
   try {
-    const r = await fetchT(`https://btch-downloader-api-green.vercel.app/api/download/aio?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`)}`, {}, 15000);
+    const r = await fetchT(`https://btch-downloader-api-green.vercel.app/api/download/aio?url=${encodeURIComponent(cleanUrl)}`, {}, 15000);
     if (r.ok) {
       const d = await r.json();
       const media = d.result || d.data || d;
       const downloadUrl = media.mp4 || media.video || media.url || (media.medias && media.medias[0]?.url) || (media.links && media.links[0]?.url);
       if (downloadUrl) {
-        return { videoId: vid, downloadUrl, title: media.title || `YouTube ${vid}`, thumbnail: media.thumbnail || `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`, mode, quality };
+        return { videoId: vid, downloadUrl, title: media.title || `YouTube ${vid}`, thumbnail: media.thumbnail || thumb, mode, quality };
       }
     }
   } catch {}
 
+  // ===== FALLBACK: cobalt =====
   const cobaltInstances = ["https://cobalt-api.kwiatekmiki.com/api/json", "https://api.cobalt.tools/api/json"];
   for (const inst of cobaltInstances) {
     try {
       const r = await fetchT(inst, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${vid}`, vQuality: quality, isAudioOnly: mode === "audio" }),
+        body: JSON.stringify({ url: cleanUrl, vQuality: quality, isAudioOnly: mode === "audio" }),
       }, 12000);
       if (r.ok) {
         const d = await r.json();
         if (d.url) {
-          return { videoId: vid, downloadUrl: d.url, title: d.filename || `YouTube ${vid}`, thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`, mode, quality };
+          return { videoId: vid, downloadUrl: d.url, title: d.filename || `YouTube ${vid}`, thumbnail: thumb, mode, quality };
         }
       }
     } catch { continue; }
   }
 
-  // Premium: VidKraken via Zyla (kalau ada API key)
-  if (ZYLA_KEY) {
-    try {
-      const format = mode === "audio" ? "audio" : quality;
-      const r = await fetchT(`${ZYLA_BASE}/download+video+or+audio+using+vidkraken+reliable+api`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${ZYLA_KEY}` },
-        body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${vid}`, format }),
-      }, 20000);
-
-      if (r.ok) {
-        const job = await r.json();
-        if (job.pollUrl) {
-          for (let i = 0; i < 10; i++) {
-            await new Promise((res) => setTimeout(res, 2000));
-            const pr = await fetchT(job.pollUrl, {}, 10000);
-            if (!pr.ok) continue;
-            const pd = await pr.json();
-            if (pd.status === "COMPLETED" && pd.downloadUrl) {
-              return { videoId: vid, downloadUrl: pd.downloadUrl, title: pd.title || `YouTube ${vid}`, thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`, mode, quality };
-            }
-            if (pd.status === "FAILED") break;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("[YouTube VidKraken]", e.message);
-    }
-  }
-
-  return { error: "Server YouTube sedang down. Coba lagi 1-2 menit.", videoId: vid, thumbnail: `https://img.youtube.com/vi/${vid}/maxresdefault.jpg` };
+  return { error: "Semua server YouTube sedang down. Coba lagi 1-2 menit atau pastikan API key Savenow valid.", videoId: vid, thumbnail: thumb };
 }
 
 /* ============ MEDIA DOWNLOADER ============ */
