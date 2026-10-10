@@ -1042,6 +1042,7 @@ export function YouTubeDownloader({ onToast }) {
   );
 }
 
+/* ============ TEMP MAIL v7 (tempmail.lol) ============ */
 export function TempMail({ onToast }) {
   const [mailbox, setMailbox] = useState(null);
   const [msgs, setMsgs] = useState([]);
@@ -1064,13 +1065,18 @@ export function TempMail({ onToast }) {
         body: JSON.stringify({ action: "tempmail-create" }),
       });
       const d = await r.json();
-      if (!r.ok || d.error) { setErr(d.error || "Gagal"); onToast?.(d.error || "Gagal", "error"); }
-      else {
+      if (!r.ok || d.error) {
+        setErr(d.error || "Gagal");
+        onToast?.(d.error || "Gagal", "error");
+      } else {
         setMailbox(d); setMsgs([]); setDetail(null);
-        localStorage.setItem("alltool-mail-v4", JSON.stringify({ ...d, ts: Date.now() }));
-        onToast?.(`Email ${d.provider === "1secmail" ? "1secmail" : "mail.tm"} siap`, "success");
+        localStorage.setItem("alltool-mail-v7", JSON.stringify({ ...d, ts: Date.now() }));
+        onToast?.("Email sementara siap", "success");
       }
-    } catch { setErr("Kesalahan jaringan"); onToast?.("Kesalahan jaringan", "error"); }
+    } catch {
+      setErr("Kesalahan jaringan");
+      onToast?.("Kesalahan jaringan", "error");
+    }
     setLoading(false);
   }, [onToast, cooldown, loading]);
 
@@ -1081,11 +1087,14 @@ export function TempMail({ onToast }) {
   }, [cooldown]);
 
   const inbox = useCallback(async (mb, silent = false) => {
-    if (!mb) return;
+    if (!mb?.token) return;
     if (!silent) setRefreshing(true);
     try {
-      const body = { action: "tempmail-inbox", provider: mb.provider, token: mb.token, login: mb.login, domain: mb.domain };
-      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const r = await fetch("/api", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "tempmail-inbox", token: mb.token }),
+      });
       const d = await r.json();
       setMsgs(Array.isArray(d) ? d : []);
       setLastRefresh(new Date());
@@ -1094,22 +1103,27 @@ export function TempMail({ onToast }) {
   }, []);
 
   const open = async (id) => {
-    if (!mailbox) return;
+    if (!mailbox?.token) return;
     setLoading(true);
     try {
-      const body = { action: "tempmail-read", provider: mailbox.provider, token: mailbox.token, login: mailbox.login, domain: mailbox.domain, id };
-      const r = await fetch("/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const r = await fetch("/api", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "tempmail-read", token: mailbox.token, id }),
+      });
       setDetail(await r.json());
-    } catch { onToast?.("Gagal buka email", "error"); }
+    } catch {
+      onToast?.("Gagal buka email", "error");
+    }
     setLoading(false);
   };
 
   useEffect(() => {
-    const s = localStorage.getItem("alltool-mail-v4");
+    const s = localStorage.getItem("alltool-mail-v7");
     if (s) {
       try {
         const mb = JSON.parse(s);
-        if (mb.ts && Date.now() - mb.ts > 7200000) create();
+        if (mb.ts && Date.now() - mb.ts > 3500000) create();
         else { setMailbox(mb); inbox(mb); }
       } catch { create(); }
     } else create();
@@ -1141,7 +1155,7 @@ export function TempMail({ onToast }) {
         {mailbox && (
           <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }}>
             <div className="soft">
-              Provider: <b style={{ color: "var(--p)" }}>{mailbox.provider === "1secmail" ? "1secmail" : "mail.tm"}</b> • Auto-refresh 15s
+              Provider: <b style={{ color: "var(--p)" }}>tempmail.lol</b> • Auto-refresh 15s
               {lastRefresh && ` • ${lastRefresh.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
             </div>
             <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, color: "var(--mut)" }}>
@@ -1153,7 +1167,9 @@ export function TempMail({ onToast }) {
 
       {detail ? (
         <div className="card fade">
-          <button className="btn btn-g" onClick={() => setDetail(null)} style={{ marginBottom: 12 }}><I.ArrowLeft size={16} />Kembali</button>
+          <button className="btn btn-g" onClick={() => setDetail(null)} style={{ marginBottom: 12 }}>
+            <I.ArrowLeft size={16} />Kembali
+          </button>
           <div style={{ fontWeight: 700, fontSize: 16 }}>{detail.subject || "(Tanpa subjek)"}</div>
           <div className="mut" style={{ marginTop: 6 }}>Dari: {detail.from?.address}</div>
           <div style={{ marginTop: 16, padding: 16, border: "1.5px solid var(--bd)", borderRadius: 12, fontSize: 13, whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.7 }}>
@@ -1179,7 +1195,7 @@ export function TempMail({ onToast }) {
             <button key={m.id} className="card card-int" style={{ textAlign: "left", width: "100%" }} onClick={() => open(m.id)}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.subject || "(Tanpa subjek)"}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.subject}</div>
                   <div className="mut" style={{ marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.from?.address}</div>
                 </div>
                 <div className="soft" style={{ flexShrink: 0 }}>{new Date(m.createdAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</div>
@@ -1454,7 +1470,7 @@ jobs:
 
   const methods = [
     { id: "pwabuilder", name: "PWABuilder", desc: "Microsoft. Kualitas terbaik. Untuk web app modern.", iconName: "Building2" },
-    { id: "appsgeyser", name: "AppsGeyser", desc: "Paling simpel. Input URL → APK dalam 2 menit.", iconName: "Zap" },
+    { id: "appsgeyser", name: "AppsGeyser", desc: "Paling simpel. Input URL -> APK dalam 2 menit.", iconName: "Zap" },
     { id: "webintoapp", name: "WebIntoApp", desc: "Cepat. Support HTML upload juga.", iconName: "Rocket" },
     { id: "manual", name: "Build Manual (ZIP)", desc: "Download source Android project. Build via Android Studio / GitHub Actions.", iconName: "Terminal" },
   ];
@@ -1535,8 +1551,8 @@ jobs:
             <div className="tag" style={{ marginBottom: 8 }}>CARA BUILD APK DARI PROJECT INI</div>
             <ol style={{ fontSize: 13, lineHeight: 1.9, paddingLeft: 20 }}>
               <li>Extract ZIP yang Anda download</li>
-              <li><b>Metode A - Android Studio:</b> Buka folder di Android Studio → Build → Build APK</li>
-              <li><b>Metode B - GitHub Actions (gratis):</b> Upload project ke GitHub → file workflow sudah disertakan → APK otomatis ter-build → download dari Actions tab</li>
+              <li><b>Metode A - Android Studio:</b> Buka folder di Android Studio -> Build -> Build APK</li>
+              <li><b>Metode B - GitHub Actions (gratis):</b> Upload project ke GitHub -> workflow sudah disertakan -> APK otomatis ter-build -> download dari Actions tab</li>
             </ol>
           </div>
         </>
