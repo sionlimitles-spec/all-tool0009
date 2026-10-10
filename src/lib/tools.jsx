@@ -743,7 +743,7 @@ export function VirusScanner({ onToast }) {
         </div>
 
         <div className="soft" style={{ marginTop: 10 }}>
-          {mode === "url" ? "URL diperiksa via urlscan.io (Microsoft + komunitas). Tidak butuh API key." : "Hash diperiksa via MalwareBazaar (abuse.ch). Gratis, tanpa API key."}
+          {mode === "url" ? "URL diperiksa via urlscan.io. Tidak butuh API key." : "Hash diperiksa via MalwareBazaar (abuse.ch). Gratis."}
         </div>
 
         {err && <div style={{ marginTop: 12, padding: 12, background: "rgba(239,68,68,0.1)", borderRadius: 10, color: "var(--red)", fontSize: 13 }}>{err}</div>}
@@ -1042,7 +1042,6 @@ export function YouTubeDownloader({ onToast }) {
   );
 }
 
-/* ============ TEMP MAIL (v4 - 1secmail primary) ============ */
 export function TempMail({ onToast }) {
   const [mailbox, setMailbox] = useState(null);
   const [msgs, setMsgs] = useState([]);
@@ -1233,7 +1232,7 @@ export function IpLookup({ onToast }) {
   );
 }
 
-/* ============ APK COMPILER (v4) ============ */
+/* ============ APK COMPILER ============ */
 export function ApkCompiler({ onToast }) {
   const [method, setMethod] = useState("pwabuilder");
   const [url, setUrl] = useState("");
@@ -1289,7 +1288,6 @@ export function ApkCompiler({ onToast }) {
   const downloadAndroidProject = () => {
     if (!validHtml) return;
     const safe = name.replace(/[^a-zA-Z0-9]/g, "");
-    const pkgPath = pkg.replace(/\./g, "/");
 
     const files = {
       "README.md": `# ${name} - Android Project
@@ -1300,21 +1298,19 @@ Project ini dibuat otomatis oleh AllTool APK Compiler.
 
 ### Metode 1: Android Studio (Lokal)
 1. Buka folder ini di Android Studio
-2. Klik Build → Build APK(s)
+2. Klik Build -> Build APK(s)
 3. APK tersedia di app/build/outputs/apk/debug/
 
 ### Metode 2: GitHub Actions (Online, Gratis)
 1. Upload folder ini ke GitHub
-2. Buat file .github/workflows/build.yml (lihat template di bawah)
-3. Push → otomatis build APK
-4. Download APK dari tab Releases
+2. File workflow .github/workflows/build.yml sudah disertakan
+3. Push -> otomatis build APK
+4. Download APK dari tab Actions / Artifacts
 
-## File Penting
-- app/src/main/assets/index.html — HTML website Anda
-- app/src/main/AndroidManifest.xml — konfigurasi app
-- app/build.gradle — config build
+## Info
 - Package: ${pkg}
 - Version: ${version}
+- HTML Anda ada di: app/src/main/assets/index.html
 `,
       "app/src/main/assets/index.html": htmlCode,
       "app/src/main/AndroidManifest.xml": `<?xml version="1.0" encoding="utf-8"?>
@@ -1323,9 +1319,8 @@ Project ini dibuat otomatis oleh AllTool APK Compiler.
     <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="${name}"
-        android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
-        android:theme="@style/AppTheme">
+        android:theme="@android:style/Theme.NoTitleBar">
         <activity android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden">
@@ -1336,15 +1331,15 @@ Project ini dibuat otomatis oleh AllTool APK Compiler.
         </activity>
     </application>
 </manifest>`,
-      "app/src/main/java/com/alltool/app/MainActivity.java": `package ${pkg};
+      [`app/src/main/java/${pkg.replace(/\./g, "/")}/MainActivity.java`]: `package ${pkg};
 
 import android.os.Bundle;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebSettings;
-import androidx.appcompat.app.AppCompatActivity;
+import android.app.Activity;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
     private WebView webView;
 
     @Override
@@ -1395,7 +1390,6 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
 }`,
       "build.gradle": `buildscript {
     repositories { google(); mavenCentral() }
@@ -1405,7 +1399,9 @@ allprojects {
     repositories { google(); mavenCentral() }
 }`,
       "settings.gradle": `include ':app'
-rootProject.name = "${name}"`,
+rootProject.name = "${safe}"`,
+      "gradle.properties": `android.useAndroidX=true
+org.gradle.jvmargs=-Xmx2048m`,
       ".github/workflows/build.yml": `name: Build APK
 on:
   push:
@@ -1420,11 +1416,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Build with Gradle
-        run: |
-          chmod +x gradlew || true
-          gradle wrapper --gradle-version 8.1.0 || true
-          ./gradlew assembleDebug
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+      - name: Build Debug APK
+        run: gradle assembleDebug
       - uses: actions/upload-artifact@v3
         with:
           name: app-debug
@@ -1437,11 +1432,11 @@ jobs:
       zip.generateAsync({ type: "blob" }).then((blob) => {
         const u = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = u; a.download = `${name.replace(/\s+/g, "_")}_android_project.zip`; a.click();
+        a.href = u; a.download = `${safe}_android_project.zip`; a.click();
         URL.revokeObjectURL(u);
         onToast?.("Project Android terunduh. Baca README.md", "success");
       });
-    });
+    }).catch(() => onToast?.("Gagal generate ZIP", "error"));
   };
 
   const handleFile = (f) => {
@@ -1451,7 +1446,6 @@ jobs:
       setHtmlCode(text);
       setUploaded(f.name);
       onToast?.(`File ${f.name} dimuat`, "success");
-      // Coba ekstrak title dari HTML
       const m = text.match(/<title>(.+?)<\/title>/i);
       if (m && !name) setName(m[1]);
     };
@@ -1459,11 +1453,16 @@ jobs:
   };
 
   const methods = [
-    { id: "pwabuilder", name: "PWABuilder", desc: "Microsoft. Kualitas terbaik. Untuk web app modern.", icon: "Building2" },
-    { id: "appsgeyser", name: "AppsGeyser", desc: "Paling simpel. Input URL → APK dalam 2 menit.", icon: "Zap" },
-    { id: "webintoapp", name: "WebIntoApp", desc: "Cepat. Support HTML upload juga.", icon: "Rocket" },
-    { id: "manual", name: "Build Manual (ZIP)", desc: "Download source Android project. Build via Android Studio / GitHub Actions.", icon: "Terminal" },
+    { id: "pwabuilder", name: "PWABuilder", desc: "Microsoft. Kualitas terbaik. Untuk web app modern.", iconName: "Building2" },
+    { id: "appsgeyser", name: "AppsGeyser", desc: "Paling simpel. Input URL → APK dalam 2 menit.", iconName: "Zap" },
+    { id: "webintoapp", name: "WebIntoApp", desc: "Cepat. Support HTML upload juga.", iconName: "Rocket" },
+    { id: "manual", name: "Build Manual (ZIP)", desc: "Download source Android project. Build via Android Studio / GitHub Actions.", iconName: "Terminal" },
   ];
+
+  const renderIcon = (iconName, size) => {
+    const C = I[iconName] || I.Wrench;
+    return <C size={size} />;
+  };
 
   return (
     <div className="col">
@@ -1472,7 +1471,7 @@ jobs:
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
           {methods.map((m) => (
             <button key={m.id} onClick={() => setMethod(m.id)} className="card card-int" style={{ textAlign: "left", border: method === m.id ? "1.5px solid var(--p)" : "1px solid var(--bd)" }}>
-              <div className="ic" style={{ marginBottom: 10 }}><I[m.icon] size={20} /></div>
+              <div className="ic" style={{ marginBottom: 10 }}>{renderIcon(m.iconName, 20)}</div>
               <div style={{ fontSize: 14, fontWeight: 700 }}>{m.name}</div>
               <div className="mut" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5 }}>{m.desc}</div>
             </button>
@@ -1538,7 +1537,6 @@ jobs:
               <li>Extract ZIP yang Anda download</li>
               <li><b>Metode A - Android Studio:</b> Buka folder di Android Studio → Build → Build APK</li>
               <li><b>Metode B - GitHub Actions (gratis):</b> Upload project ke GitHub → file workflow sudah disertakan → APK otomatis ter-build → download dari Actions tab</li>
-              <li><b>Metode C - Build online:</b> Upload project ke layanan build APK online seperti Appcircle / Bitrise</li>
             </ol>
           </div>
         </>
