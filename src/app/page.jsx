@@ -5,67 +5,52 @@ import * as I from "lucide-react";
 import * as T from "@/lib/tools";
 import { supabaseReady, signUp, signIn, signOut, getUser, onAuthChange, cloudGetFavorites, cloudAddFavorite, cloudRemoveFavorite } from "@/lib/supabase";
 
-/* ============ REGISTRY ============ */
+/* ============ REGISTRY — 31 TOOLS ============ */
 const TOOLS = [
-  // TEXT
+  /* ---- TEXT (4) ---- */
   { id: "word-counter", n: "Word Counter", d: "Hitung kata, karakter, kalimat, paragraf.", c: "text", i: "Hash", f: T.WordCounter },
   { id: "case-converter", n: "Case Converter", d: "Ubah kapitalisasi teks.", c: "text", i: "Type", f: T.CaseConverter },
   { id: "lorem-ipsum", n: "Lorem Ipsum", d: "Generator teks dummy.", c: "text", i: "FileText", f: T.LoremIpsum },
-  { id: "text-diff", n: "Text Diff", d: "Bandingkan dua teks.", c: "text", i: "GitCompare", f: T.TextDiff },
-  { id: "remove-duplicates", n: "Remove Duplicates", d: "Hapus baris duplikat.", c: "text", i: "ListX", f: T.RemoveDuplicates },
-  { id: "text-repeater", n: "Text Repeater", d: "Ulangi teks berkali-kali.", c: "text", i: "Repeat", f: T.TextRepeater },
-  { id: "fancy-text", n: "Fancy Text", d: "Teks gaya unik untuk medsos.", c: "text", i: "Sparkles", f: T.FancyText },
-  { id: "reverse-text", n: "Reverse Text", d: "Balik urutan karakter.", c: "text", i: "ArrowLeftRight", f: T.ReverseText },
   { id: "markdown-preview", n: "Markdown Preview", d: "Live render markdown.", c: "text", i: "FileCode", f: T.MarkdownPreview },
-  { id: "slug-generator", n: "Slug Generator", d: "Buat URL slug dari judul.", c: "text", i: "Link2", f: T.SlugGenerator },
 
-  // DEVELOPER
+  /* ---- DEVELOPER (11) ---- */
   { id: "json-formatter", n: "JSON Formatter", d: "Format, validasi, minify JSON.", c: "developer", i: "Braces", f: T.JsonFormatter },
   { id: "base64", n: "Base64 Encoder", d: "Encode dan decode Base64.", c: "developer", i: "Binary", f: T.Base64Tool },
   { id: "url-encoder", n: "URL Encoder", d: "Encode dan decode URL.", c: "developer", i: "Link", f: T.UrlEncoder },
-  { id: "html-encoder", n: "HTML Entity", d: "Encode karakter HTML.", c: "developer", i: "Code", f: T.HtmlEncoder },
+  { id: "hash-generator", n: "Hash Generator", d: "SHA-1, SHA-256, SHA-384, SHA-512.", c: "developer", i: "Shield", f: T.HashGenerator },
+  { id: "qr-generator", n: "QR Code Generator", d: "Buat QR code custom warna.", c: "developer", i: "QrCode", f: T.QrGenerator },
   { id: "html-editor", n: "HTML Editor", d: "Live preview HTML/CSS/JS.", c: "developer", i: "Code2", f: T.HtmlEditor },
-  { id: "css-playground", n: "CSS Playground", d: "Live CSS editor.", c: "developer", i: "Palette", f: T.CssPlayground },
+  { id: "css-playground", n: "CSS Playground", d: "Live CSS editor dengan preview.", c: "developer", i: "Palette", f: T.CssPlayground },
   { id: "html-minifier", n: "HTML Minifier", d: "Minify HTML code.", c: "developer", i: "FileCode2", f: T.HtmlMinifier },
   { id: "css-minifier", n: "CSS Minifier", d: "Minify CSS code.", c: "developer", i: "Paintbrush", f: T.CssMinifier },
   { id: "js-minifier", n: "JS Minifier", d: "Minify JavaScript code.", c: "developer", i: "FileTerminal", f: T.JsMinifier },
-  { id: "jwt-decoder", n: "JWT Decoder", d: "Decode JSON Web Token.", c: "developer", i: "Key", f: T.JwtDecoder },
-  { id: "hash-generator", n: "Hash Generator", d: "SHA-1, SHA-256, SHA-384, SHA-512.", c: "developer", i: "Shield", f: T.HashGenerator },
-  { id: "uuid-generator", n: "UUID Generator", d: "Buat UUID v4 acak.", c: "developer", i: "Fingerprint", f: T.UuidGenerator },
-  { id: "regex-tester", n: "Regex Tester", d: "Uji ekspresi reguler.", c: "developer", i: "Search", f: T.RegexTester },
-  { id: "timestamp-converter", n: "Timestamp Converter", d: "Konversi Unix timestamp.", c: "developer", i: "Clock", f: T.TimestampConverter },
-  { id: "qr-generator", n: "QR Code Generator", d: "Buat QR code custom.", c: "developer", i: "QrCode", f: T.QrGenerator },
+  { id: "virus-scanner", n: "Virus Scanner", d: "Scan URL dan file berbahaya.", c: "developer", i: "ShieldAlert", f: T.VirusScanner },
 
-  // IMAGE
+  /* ---- IMAGE (3) ---- */
   { id: "image-compressor", n: "Image Compressor", d: "Kompres gambar kualitas custom.", c: "image", i: "Minimize", f: T.ImageCompressor },
-  { id: "image-resizer", n: "Image Resizer", d: "Ubah ukuran gambar.", c: "image", i: "Maximize", f: T.ImageResizer },
-  { id: "image-to-base64", n: "Image to Base64", d: "Konversi gambar ke Base64.", c: "image", i: "Image", f: T.ImageToBase64 },
-  { id: "image-converter", n: "Image Converter", d: "Konversi format gambar.", c: "image", i: "RefreshCw", f: T.ImageConverter },
+  { id: "image-resizer", n: "Image Resizer", d: "Ubah ukuran gambar sesuai kebutuhan.", c: "image", i: "Maximize", f: T.ImageResizer },
+  { id: "image-converter", n: "Image Converter", d: "Konversi PNG, JPG, WebP.", c: "image", i: "RefreshCw", f: T.ImageConverter },
 
-  // CALCULATOR
+  /* ---- CALCULATOR (4) ---- */
   { id: "bmi-calculator", n: "BMI Calculator", d: "Hitung indeks massa tubuh.", c: "calculator", i: "Activity", f: T.BmiCalculator },
-  { id: "age-calculator", n: "Age Calculator", d: "Hitung umur dari lahir.", c: "calculator", i: "Calendar", f: T.AgeCalculator },
-  { id: "percentage", n: "Percentage", d: "Hitung persentase.", c: "calculator", i: "Percent", f: T.Percentage },
-  { id: "loan-calculator", n: "Loan Calculator", d: "Simulasi cicilan pinjaman.", c: "calculator", i: "Wallet", f: T.LoanCalculator },
+  { id: "age-calculator", n: "Age Calculator", d: "Hitung umur dari tanggal lahir.", c: "calculator", i: "Calendar", f: T.AgeCalculator },
+  { id: "percentage", n: "Percentage", d: "Hitung persentase dengan mudah.", c: "calculator", i: "Percent", f: T.Percentage },
   { id: "unit-converter", n: "Unit Converter", d: "Konversi panjang, berat, suhu.", c: "calculator", i: "Scale", f: T.UnitConverter },
 
-  // SECURITY
-  { id: "password-generator", n: "Password Generator", d: "Buat password kuat.", c: "security", i: "Lock", f: T.PasswordGenerator },
-  { id: "password-strength", n: "Password Strength", d: "Cek kekuatan password.", c: "security", i: "ShieldCheck", f: T.PasswordStrength },
+  /* ---- SECURITY (2) ---- */
+  { id: "password-generator", n: "Password Generator", d: "Buat password kuat dan aman.", c: "security", i: "Lock", f: T.PasswordGenerator },
+  { id: "password-strength", n: "Password Strength", d: "Cek kekuatan password Anda.", c: "security", i: "ShieldCheck", f: T.PasswordStrength },
 
-  // MEDIA / DOWNLOADER
+  /* ---- MEDIA (5) ---- */
   { id: "downloader-tiktok", n: "TikTok Downloader", d: "Unduh TikTok tanpa watermark.", c: "media", i: "Music", f: T.TikTokDownloader },
   { id: "downloader-youtube", n: "YouTube Downloader", d: "Unduh video/audio YouTube.", c: "media", i: "Youtube", f: T.YouTubeDownloader },
-  { id: "temp-mail", n: "Temp Mail", d: "Email sementara instan.", c: "media", i: "Mail", f: T.TempMail },
-  { id: "ip-lookup", n: "IP Lookup", d: "Cek lokasi alamat IP.", c: "media", i: "Globe", f: T.IpLookup },
-  { id: "web-to-apk", n: "Web to APK", d: "Ubah website jadi APK Android.", c: "media", i: "Smartphone", f: T.WebToApk },
+  { id: "temp-mail", n: "Temp Mail", d: "Email sementara instan (1secmail).", c: "media", i: "Mail", f: T.TempMail },
+  { id: "ip-lookup", n: "IP Lookup", d: "Cek lokasi dan info alamat IP.", c: "media", i: "Globe", f: T.IpLookup },
+  { id: "apk-compiler", n: "APK Compiler", d: "Ubah web/HTML jadi APK Android.", c: "media", i: "Smartphone", f: T.ApkCompiler },
 
-  // UTILITY
+  /* ---- UTILITY (2) ---- */
   { id: "color-picker", n: "Color Picker", d: "Konversi HEX, RGB, HSL.", c: "utility", i: "Palette", f: T.ColorPicker },
-  { id: "cron-parser", n: "Cron Parser", d: "Baca ekspresi cron.", c: "utility", i: "Timer", f: T.CronParser },
-  { id: "barcode-generator", n: "Barcode Generator", d: "Buat barcode dari teks.", c: "utility", i: "Barcode", f: T.BarcodeGenerator },
   { id: "text-to-speech", n: "Text to Speech", d: "Ubah teks jadi suara.", c: "utility", i: "Volume2", f: T.TextToSpeech },
-  { id: "random-string", n: "Random String", d: "String acak dengan pola.", c: "utility", i: "Shuffle", f: T.RandomString },
 ];
 
 const CATS = [
@@ -220,7 +205,7 @@ export default function App() {
           </div>
           <div>
             <div className="grad" style={{ fontSize: 19, fontWeight: 800, lineHeight: 1.1 }}>AllTool</div>
-            <div className="soft" style={{ fontWeight: 600 }}>v3.0 · {TOOLS.length} tools</div>
+            <div className="soft" style={{ fontWeight: 600 }}>v4.0 · {TOOLS.length} tools</div>
           </div>
         </button>
 
@@ -311,7 +296,7 @@ export default function App() {
   );
 }
 
-/* ============ SUB ============ */
+/* ============ SUB COMPONENTS ============ */
 function NavItem({ active, onClick, icon, label, badge }) {
   return (
     <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 13px", borderRadius: 11, fontSize: 13.5, fontWeight: 600, background: active ? "linear-gradient(135deg, var(--p), var(--ph))" : "transparent", color: active ? "#fff" : "var(--text)", transition: "all 0.18s", width: "100%", textAlign: "left", boxShadow: active ? "0 4px 12px -4px var(--p)" : "none" }}>
@@ -347,7 +332,7 @@ function HomePage({ filtered, cat, setCat, openTool, favTools, toggleFav, favori
           <br />Satu Platform.
         </h1>
         <p className="sub" style={{ maxWidth: 640 }}>
-          50+ tools gratis untuk developer, desainer, dan produktivitas harian. Downloader TikTok tanpa watermark, YouTube, temp mail, HTML editor, web to APK, dan banyak lagi.
+          {TOOLS.length} tools berkualitas untuk developer, desainer, dan produktivitas harian. Downloader TikTok tanpa watermark, YouTube, temp mail, HTML editor, APK compiler, virus scanner, dan banyak lagi.
         </p>
 
         <div className="grid" style={{ marginTop: 28, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
@@ -565,8 +550,8 @@ function AboutPage() {
       <div className="col" style={{ maxWidth: 720 }}>
         <div className="card">
           <p className="mut" style={{ lineHeight: 1.8 }}>
-            AllTool v3.0 adalah platform kumpulan alat serbaguna yang dapat digunakan secara gratis.
-            Terdiri dari {TOOLS.length} alat yang mencakup teks, developer, gambar, kalkulator, keamanan, media, dan utilitas.
+            AllTool v4.0 adalah platform kumpulan alat serbaguna yang dapat digunakan secara gratis.
+            Terdiri dari {TOOLS.length} alat pilihan yang mencakup teks, developer, gambar, kalkulator, keamanan, media, dan utilitas.
             Semua alat dirancang untuk cepat, bersih, tanpa iklan, dan tanpa gangguan.
           </p>
         </div>
@@ -586,8 +571,8 @@ function AboutPage() {
         </div>
         <div className="card" style={{ textAlign: "center", padding: 28 }}>
           <div className="soft" style={{ marginBottom: 8 }}>DIBUAT DENGAN</div>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>Next.js · Vercel · Supabase · Tailwind CSS · Lucide</div>
-          <div className="soft" style={{ marginTop: 8 }}>AllTool v3.0 · 2025</div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Next.js · Vercel · Supabase · Lucide</div>
+          <div className="soft" style={{ marginTop: 8 }}>AllTool v4.0 · 2025</div>
         </div>
       </div>
     </>
@@ -681,4 +666,4 @@ function AuthModal({ onClose, onSubmit }) {
       </div>
     </div>
   );
-    }
+  }
