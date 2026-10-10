@@ -122,12 +122,42 @@ async function proxyStream(targetUrl, request) {
   return new NextResponse(r.body, { status: r.status, headers: outHeaders });
 }
 
-/* ============ TEMP MAIL (diperbaiki) ============ */
+/* ============ TEMP MAIL — 1secmail (PRIMARY, tanpa auth, sangat stabil) ============ */
+async function createTempMail1sec() {
+  const r = await fetchT("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1", {}, 8000);
+  if (!r.ok) throw new Error("Provider 1secmail tidak tersedia.");
+  const arr = await r.json();
+  if (!Array.isArray(arr) || !arr[0]) throw new Error("Gagal generate email.");
+  const [login, domain] = arr[0].split("@");
+  return {
+    email: arr[0],
+    login,
+    domain,
+    token: null,
+    provider: "1secmail",
+    expiresAt: Date.now() + 7200000,
+  };
+}
+
+async function inbox1sec(login, domain) {
+  const r = await fetchT(`https://www.1secmail.com/api/v1/?action=getMessages&login=${encodeURIComponent(login)}&domain=${encodeURIComponent(domain)}`, {}, 10000);
+  if (!r.ok) throw new Error("Gagal ambil inbox.");
+  const j = await r.json();
+  return Array.isArray(j) ? j : [];
+}
+
+async function read1sec(login, domain, id) {
+  const r = await fetchT(`https://www.1secmail.com/api/v1/?action=readMessage&login=${encodeURIComponent(login)}&domain=${encodeURIComponent(domain)}&id=${id}`, {}, 10000);
+  if (!r.ok) throw new Error("Gagal baca pesan.");
+  return await r.json();
+}
+
+/* ============ TEMP MAIL — mail.tm (FALLBACK) ============ */
 let lastTmCreate = 0;
 let cachedDomains = null;
 let domainsFetchedAt = 0;
 
-async function getDomains() {
+async function getTmDomains() {
   const now = Date.now();
   if (cachedDomains && now - domainsFetchedAt < 60000) return cachedDomains;
   try {
@@ -139,62 +169,112 @@ async function getDomains() {
   } catch { return cachedDomains || []; }
 }
 
-async function createTempMail(attempt = 0) {
-  // Rate limit lokal: maksimal 1x per 3 detik
+async function createTempMailTm() {
   const now = Date.now();
-  if (now - lastTmCreate < 3000) {
-    await new Promise((r) => setTimeout(r, 3000 - (now - lastTmCreate)));
-  }
+  if (now - lastTmCreate < 3000) await new Promise((r) => setTimeout(r, 3000 - (now - lastTmCreate)));
   lastTmCreate = Date.now();
 
-  const domains = await getDomains();
-  if (!domains.length) {
-    throw new Error("Layanan temp mail sedang down. Coba lagi nanti.");
-  }
+  const domains = await getTmDomains();
+  if (!domains.length) throw new Error("Provider mail.tm tidak tersedia.");
 
-  // Shuffle domain biar tidak selalu pakai domain yang sama
   const shuffled = [...domains].sort(() => Math.random() - 0.5);
-  const candidate = shuffled.slice(0, 5);
-
-  for (const dom of candidate) {
-    const email = `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}@${dom}`;
+  for (const dom of shuffled.slice(0, 5)) {
+    const email = `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-3)}@${dom}`;
     const pw = Math.random().toString(36).slice(2, 16);
-
     try {
       const cr = await fetchT("https://api.mail.tm/accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: email, password: pw }),
       }, 10000);
-
-      if (cr.status === 429) {
-        // Rate limited, tunggu dan coba lagi
-        await new Promise((r) => setTimeout(r, 4000));
-        continue;
-      }
+      if (cr.status === 429) { await new Promise((r) => setTimeout(r, 4000)); continue; }
       if (!cr.ok) continue;
 
       const tr = await fetchT("https://api.mail.tm/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: email, password: pw }),
       }, 10000);
-
       if (!tr.ok) continue;
       const td = await tr.json();
       if (!td.token) continue;
 
-      return { email, password: pw, token: td.token, expiresAt: Date.now() + 7200000 };
+      return { email, password: pw, token: td.token, provider: "mailtm", expiresAt: Date.now() + 7200000 };
     } catch { continue; }
   }
+  throw new Error("mail.tm sibuk.");
+}
 
-  // Kalau semua gagal, retry sekali lagi setelah delay
-  if (attempt < 1) {
-    await new Promise((r) => setTimeout(r, 3000));
-    return createTempMail(attempt + 1);
+/* ============ VIRUS SCANNER ============ */
+// Cek URL berbahaya via VirusTotal public URL (tanpa API key - terbatas)
+async function scanUrlVirusTotal(url) {
+  // VT butuh API key. Pakai urlscan.io (free tier, tidak butuh key untuk submission publik) sebagai alternatif
+  try {
+    const r = await fetchT("https://urlscan.io/api/v1/scan/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": UA },
+      body: JSON.stringify({ url, visibility: "public" }),
+    }, 15000);
+
+    if (!r.ok) {
+      return { error: "Layanan scan sedang sibuk. Coba lagi 30 detik." };
+    }
+    const d = await r.json();
+    return {
+      scanId: d.uuid,
+      resultUrl: d.result,
+      apiUrl: d.api,
+      message: "Scan berhasil dimulai. Hasil siap dalam ~15 detik.",
+    };
+  } catch (e) {
+    return { error: "Gagal scan: " + e.message };
   }
+}
 
-  throw new Error("Semua domain sibuk. Tunggu 10 detik lalu coba lagi.");
+async function getUrlScanResult(id) {
+  try {
+    const r = await fetchT(`https://urlscan.io/api/v1/result/${id}/`, { headers: { "User-Agent": UA } }, 10000);
+    if (!r.ok) return { error: "Hasil belum siap." };
+    const d = await r.json();
+    return {
+      verdicts: d.verdicts?.overall || null,
+      score: d.verdicts?.overall?.score || 0,
+      malicious: d.verdicts?.overall?.malicious || false,
+      categories: d.verdicts?.overall?.categories || [],
+      page: d.page || null,
+      lists: d.lists || null,
+      stats: d.stats || null,
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+// Cek hash file via VirusTotal (lookup hash publik, tanpa API key untuk hash yang ada)
+async function scanHash(hash) {
+  try {
+    // VT v3 public endpoint untuk lookup hash (butuh API key, tapi ada endpoint publik untuk beberapa)
+    // Fallback: gunakan MalwareBazaar (abuse.ch, no key)
+    const r = await fetchT("https://mb-api.abuse.ch/api/v1/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `query=get_info&hash=${hash}`,
+    }, 12000);
+    const d = await r.json();
+    if (d.query_status === "ok" && d.data && d.data.length > 0) {
+      const info = d.data[0];
+      return {
+        found: true,
+        malware: true,
+        signature: info.signature || "Unknown",
+        fileType: info.file_type || "Unknown",
+        fileName: info.file_name || "Unknown",
+        firstSeen: info.first_seen,
+        tags: info.tags || [],
+      };
+    }
+    return { found: false, message: "Hash tidak ditemukan di database malware. Kemungkinan aman." };
+  } catch (e) {
+    return { error: "Gagal lookup: " + e.message };
+  }
 }
 
 /* ============ HANDLER ============ */
@@ -203,6 +283,7 @@ export async function POST(req) {
     const body = await req.json();
     const { action } = body;
 
+    /* ---- TIKTOK ---- */
     if (action === "tiktok") {
       if (!body.url || !/tiktok\.com|vt\.tiktok|vm\.tiktok/i.test(body.url)) {
         return NextResponse.json({ error: "URL TikTok tidak valid." }, { status: 400 });
@@ -212,45 +293,114 @@ export async function POST(req) {
       return NextResponse.json(d);
     }
 
+    /* ---- YOUTUBE ---- */
     if (action === "youtube") {
       const d = await youtubeDownload(body.url, body.mode || "video");
       if (d.error) return NextResponse.json(d, { status: d.videoId ? 503 : 400 });
       return NextResponse.json(d);
     }
 
+    /* ---- TEMP MAIL: create ---- */
     if (action === "tempmail-create") {
+      // Coba 1secmail dulu
       try {
-        const data = await createTempMail();
-        return NextResponse.json(data);
-      } catch (e) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        const d = await createTempMail1sec();
+        return NextResponse.json(d);
+      } catch (e1) {
+        console.warn("[temp mail 1sec gagal]", e1.message);
+        // Fallback ke mail.tm
+        try {
+          const d = await createTempMailTm();
+          return NextResponse.json(d);
+        } catch (e2) {
+          return NextResponse.json({ error: "Semua provider sedang sibuk. Tunggu 10 detik lalu coba lagi." }, { status: 500 });
+        }
       }
     }
 
+    /* ---- TEMP MAIL: inbox ---- */
     if (action === "tempmail-inbox") {
-      if (!body.token) return NextResponse.json([]);
-      try {
-        const r = await fetchT("https://api.mail.tm/messages?page=1", {
-          headers: { Authorization: `Bearer ${body.token}` },
-        }, 10000);
-        if (!r.ok) return NextResponse.json([]);
-        const j = await r.json();
-        return NextResponse.json(j["hydra:member"] || []);
-      } catch { return NextResponse.json([]); }
+      // 1secmail
+      if (body.provider === "1secmail" && body.login && body.domain) {
+        try {
+          const msgs = await inbox1sec(body.login, body.domain);
+          // Normalisasi format ke bentuk yang sama
+          return NextResponse.json(msgs.map((m) => ({
+            id: m.id,
+            from: { address: m.from, name: m.from },
+            subject: m.subject,
+            intro: m.subject,
+            createdAt: m.date,
+            seen: false,
+          })));
+        } catch { return NextResponse.json([]); }
+      }
+      // mail.tm
+      if (body.token) {
+        try {
+          const r = await fetchT("https://api.mail.tm/messages?page=1", {
+            headers: { Authorization: `Bearer ${body.token}` },
+          }, 10000);
+          if (!r.ok) return NextResponse.json([]);
+          const j = await r.json();
+          return NextResponse.json(j["hydra:member"] || []);
+        } catch { return NextResponse.json([]); }
+      }
+      return NextResponse.json([]);
     }
 
+    /* ---- TEMP MAIL: read ---- */
     if (action === "tempmail-read") {
-      if (!body.token || !body.id) return NextResponse.json({ error: "Parameter kurang." }, { status: 400 });
-      const r = await fetchT(`https://api.mail.tm/messages/${body.id}`, {
-        headers: { Authorization: `Bearer ${body.token}` },
-      }, 10000);
-      return NextResponse.json(await r.json());
+      // 1secmail
+      if (body.provider === "1secmail" && body.login && body.domain && body.id) {
+        try {
+          const d = await read1sec(body.login, body.domain, body.id);
+          return NextResponse.json({
+            subject: d.subject,
+            from: { address: d.from, name: d.from },
+            text: d.textBody || d.body || "",
+            html: d.htmlBody ? [d.htmlBody] : [],
+            createdAt: d.date,
+          });
+        } catch (e) { return NextResponse.json({ error: e.message }, { status: 500 }); }
+      }
+      // mail.tm
+      if (body.token && body.id) {
+        try {
+          const r = await fetchT(`https://api.mail.tm/messages/${body.id}`, {
+            headers: { Authorization: `Bearer ${body.token}` },
+          }, 10000);
+          return NextResponse.json(await r.json());
+        } catch (e) { return NextResponse.json({ error: e.message }, { status: 500 }); }
+      }
+      return NextResponse.json({ error: "Parameter kurang." }, { status: 400 });
     }
 
+    /* ---- IP LOOKUP ---- */
     if (action === "ip-lookup") {
       const target = body.ip ? `/${body.ip}` : "";
       const r = await fetchT(`https://ipapi.co${target}/json/`, {}, 8000);
       return NextResponse.json(await r.json());
+    }
+
+    /* ---- VIRUS SCAN: URL ---- */
+    if (action === "scan-url") {
+      if (!body.url) return NextResponse.json({ error: "URL wajib." }, { status: 400 });
+      const d = await scanUrlVirusTotal(body.url);
+      return NextResponse.json(d);
+    }
+
+    if (action === "scan-url-result") {
+      if (!body.id) return NextResponse.json({ error: "ID wajib." }, { status: 400 });
+      const d = await getUrlScanResult(body.id);
+      return NextResponse.json(d);
+    }
+
+    /* ---- VIRUS SCAN: File hash ---- */
+    if (action === "scan-hash") {
+      if (!body.hash) return NextResponse.json({ error: "Hash wajib." }, { status: 400 });
+      const d = await scanHash(body.hash);
+      return NextResponse.json(d);
     }
 
     return NextResponse.json({ error: "Aksi tidak dikenal." }, { status: 400 });
@@ -267,5 +417,5 @@ export async function GET(req) {
     try { return await proxyStream(proxyUrl, req); }
     catch (e) { return NextResponse.json({ error: e.message }, { status: 500 }); }
   }
-  return NextResponse.json({ ok: true, service: "AllTool API", version: "3.0" });
-        }
+  return NextResponse.json({ ok: true, service: "AllTool API", version: "4.0" });
+}
