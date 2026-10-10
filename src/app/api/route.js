@@ -45,7 +45,12 @@ async function tiktokDownload(url) {
   return null;
 }
 
-/* ============ YOUTUBE (Savenow.to + fallback gratis) ============ */
+/* ============ YOUTUBE ============ */
+function extractYtId(url) {
+  const m = String(url || "").match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
 const SAVENOW_KEY = process.env.SAVENOW_API_KEY || "";
 const SAVENOW_BASE = "https://p.savenow.to/api/v2/download";
 
@@ -61,13 +66,12 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
     try {
       const format = mode === "audio" ? "mp3" : "mp4";
       const startUrl = `${SAVENOW_BASE}?format=${format}&url=${encodeURIComponent(cleanUrl)}&apikey=${SAVENOW_KEY}`;
-      
+
       const r = await fetchT(startUrl, { headers: { "User-Agent": UA } }, 20000);
       if (!r.ok) throw new Error(`Savenow HTTP ${r.status}`);
-      
+
       const first = await r.json();
-      
-      // Kalau langsung selesai (success=1)
+
       if (first.success === 1 || first.success === true) {
         const dlUrl = first.download_url || first.downloadUrl || first.url;
         if (dlUrl) {
@@ -81,7 +85,6 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
         }
       }
 
-      // Kalau perlu polling
       const checkUrl = first.check_url || first.checkUrl || first.status_url || first.progress_url;
       if (checkUrl) {
         for (let i = 0; i < 20; i++) {
@@ -90,8 +93,7 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
           if (!pr.ok) continue;
           const pd = await pr.json();
           const progress = pd.progress || pd.percentage || 0;
-          
-          // progress 1000 = selesai
+
           if (progress >= 1000 || pd.success === 1 || pd.success === true) {
             const dlUrl = pd.download_url || pd.downloadUrl || pd.url;
             if (dlUrl) {
@@ -104,18 +106,16 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
               };
             }
           }
-          if (pd.success === 0 && pd.error) throw new Error(pd.error);
         }
       }
 
       throw new Error("Timeout menunggu Savenow.");
     } catch (e) {
       console.warn("[Savenow]", e.message);
-      // Lanjut ke fallback gratis di bawah
     }
   }
 
-  // ===== FALLBACK GRATIS: btch-downloader =====
+  // ===== FALLBACK 1: btch-downloader =====
   try {
     const r = await fetchT(`https://btch-downloader-api-green.vercel.app/api/download/aio?url=${encodeURIComponent(cleanUrl)}`, {}, 15000);
     if (r.ok) {
@@ -128,7 +128,7 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
     }
   } catch {}
 
-  // ===== FALLBACK: cobalt =====
+  // ===== FALLBACK 2: cobalt =====
   const cobaltInstances = ["https://cobalt-api.kwiatekmiki.com/api/json", "https://api.cobalt.tools/api/json"];
   for (const inst of cobaltInstances) {
     try {
@@ -146,7 +146,7 @@ async function youtubeDownload(url, mode = "video", quality = "1080") {
     } catch { continue; }
   }
 
-  return { error: "Semua server YouTube sedang down. Coba lagi 1-2 menit atau pastikan API key Savenow valid.", videoId: vid, thumbnail: thumb };
+  return { error: "Semua server YouTube sedang down. Coba lagi 1-2 menit.", videoId: vid, thumbnail: thumb };
 }
 
 /* ============ MEDIA DOWNLOADER ============ */
@@ -257,7 +257,7 @@ async function proxyStream(targetUrl, request, forceDownload = false, customName
   return new Response(r.body, { status: r.status, headers: outHeaders });
 }
 
-/* ============ AI CHAT (multi-provider) ============ */
+/* ============ AI CHAT ============ */
 async function aiChat(messages, model, provider, apiKey) {
   if (!apiKey) throw new Error(`API key ${provider} belum diatur. Buka Pengaturan AI untuk menambahkan.`);
 
@@ -503,5 +503,5 @@ export async function GET(req) {
     try { return await proxyStream(proxyUrl, req, forceDl, customName); }
     catch (e) { return Response.json({ error: e.message }, { status: 500 }); }
   }
-  return Response.json({ ok: true, service: "AllTool API", version: "11.0" });
-        }
+  return Response.json({ ok: true, service: "AllTool API", version: "11.1" });
+            }
